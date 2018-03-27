@@ -1,16 +1,17 @@
 #include <stdio.h>
 #include <opencv2/opencv.hpp>
 
-cv::Mat carve(cv::Mat image, int seams_to_remove);
+using namespace std;
+
+cv::Mat carve(cv::Mat image);
 int** get_backptrs(int **img, int rows, int cols);
 cv::Mat drawPaths(cv::Mat image, int** paths, int path_count);
 void draw(cv::Mat image);
 
 
-cv::Mat carve(cv::Mat image, int seams_to_remove)
+cv::Mat carve(cv::Mat image)
 {
 
-  seams = new int*[seams_to_remove];
   int rows = image.rows, cols = image.cols, x, y;
   printf("rows: %d, cols: %d\n", rows, cols);
   int **img = new int*[rows];
@@ -31,7 +32,10 @@ cv::Mat carve(cv::Mat image, int seams_to_remove)
   }
   delete[] img;
 
-  cv::Mat mt(rows, cols, CV_8UC1, img);
+  for(y = 0; y < rows; y++) {
+    delete[] ptrs[y];
+  }
+  delete[] ptrs;
 
   return mt;
 
@@ -75,16 +79,16 @@ int** get_backptrs(int **img, int rows, int cols)
     }
   }
 
-  cout << "Cost Matrix:\n";
-  for(y = 0; y < rows; y++)
-  {
-    for(x = 0; x < cols; x++)
-    {
-      cout << cost[y][x] << ",";
-    }
-    cout << endl;
-  }
-  cout << endl;
+  // cout << "Cost Matrix:\n";
+  // for(y = 0; y < rows; y++)
+  // {
+  //   for(x = 0; x < cols; x++)
+  //   {
+  //     cout << cost[y][x] << ",";
+  //   }
+  //   cout << endl;
+  // }
+  // cout << endl;
 
   for(y = 0; y < rows; y++) {
     delete[] cost[y];
@@ -124,9 +128,9 @@ void draw(cv::Mat image)
 
 int main(int argc, char** argv )
 {
-    if ( argc != 3 )
+    if ( argc != 2 )
     {
-        printf("usage: seamcarver.out <Image_Path> <Seams_to_Carve>\n");
+        printf("usage: seamcarver.out <Image_Path>\n");
         return -1;
     }
     cv::Mat image;
@@ -137,24 +141,15 @@ int main(int argc, char** argv )
         return -1;
     }
 
-    // cv::Mat image2(image.rows/2, image.cols/2, image.type());
-    cv::Mat image2(100, 120, image.type());
+    cv::Mat image2(image.rows/2, image.cols/2, image.type());
+    // cv::Mat image2(100, 120, image.type());
     cv:resize(image, image2, image2.size(), 0, 0, cv::INTER_LINEAR);
-    // cv::namedWindow("Display Image", cv::WINDOW_AUTOSIZE );
-    // cv::imshow("Display Image", image2);
-    // cv::waitKey(0);
-    // cout << "0, 0 char pixel: " << (int) image.at<uchar>(500, 500) << endl;
-    // cv::Vec3b color = image.at<cv::Vec3b>(500, 500);
-    // cout << "0, 0 pixel: " << color << endl;
 
     printf("rows: %d, cols: %d\n", image2.rows, image2.cols);
 
-    SeamCarver sc;
     cv::Mat img2;
     printf("Carving\n");
-    img2 = sc.carve(image2, atoi(argv[2]));
-    // draw(img2);
-    img2 = sc.drawSeams(image2);
+    img2 = carve(image2);
 
     printf("done carving\n");
     printf("rows: %d, cols: %d\n", img2.rows, img2.cols);
