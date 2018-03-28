@@ -7,11 +7,15 @@ using namespace std;
 
 cv::Mat carve(cv::Mat image, cv::Mat imagecolor);
 int** get_backptrs(int **img, int rows, int cols);
+int** get_forptrs(int **img, int rows, int cols);
 cv::Mat drawPaths(cv::Mat image, int** paths, int path_count);
+cv::Mat drawPaths(cv::Mat image, int** paths, int path_count, int height);
 cv::Mat drawPaths(cv::Mat image, std::vector< std::vector<int> > paths);
 void draw(cv::Mat image);
 std::vector< std::vector<int> > findMostFreq(int** paths, int path_count, int cols);
 
+int WEIGHT_MAX = 20;
+float INCREMENT = 0.15;
 
 cv::Mat carve(cv::Mat image, cv::Mat imagecolor)
 {
@@ -28,11 +32,11 @@ cv::Mat carve(cv::Mat image, cv::Mat imagecolor)
     }
   }
 
-  int **ptrs = get_backptrs(img, rows, cols);
-  printf("finding most frequent\n");
-  std::vector< std::vector<int> > freq = findMostFreq(ptrs, rows, cols);
+  int **ptrs = get_forptrs(img, rows, cols);
+  // printf("finding most frequent\n");
+  // std::vector< std::vector<int> > freq = findMostFreq(ptrs, rows, cols);
   printf("drawing paths\n");
-  cv::Mat mt = drawPaths(imagecolor, freq);
+  cv::Mat mt = drawPaths(imagecolor, ptrs, rows, cols);
   printf("paths drawn\n");
 
   for(y = 0; y < rows; y++) {
@@ -51,32 +55,34 @@ cv::Mat carve(cv::Mat image, cv::Mat imagecolor)
 
 int** get_forptrs(int **img, int rows, int cols)
 {
-  // printf("getting forptrs; rows: %d, cols: %d\n", rows, cols);
-  // int lowest = 0, x = 0, y = 0;
-  // // int **backptrs = new int*[rows];
-  // int **forptrs = new int*[cols-1];
-  // for(x = 0; x < cols-1; x++) {
-  //   forptrs[x] = new int[rows];
-  // }
-  //
-  // for(x = 0; x < cols-1; x++)
-  // {
-  //   for(y = 0; y < rows; y++)
-  //   {
-  //     lowest = cost[y][x+1];
-  //     forptrs[y][x] = y;
-  //     if ( y > 0 && cost[y-1][x+1] < lowest ) {
-  //       lowest = cost[y-1][x+1];
-  //       forptrs[y][x] = y-1;
-  //     }
-  //     if ( y < rows-1 && cost[y+1][x+1] < lowest ) {
-  //       lowest = cost[y+1][x+1];
-  //       forptrs[y][x] = y+1;
-  //     }
-  //   }
-  // }
-  // return forptrs;
-  return NULL;
+  printf("getting forptrs; rows: %d, cols: %d\n", rows, cols);
+  int lowest = 0, path = 0, path_count = rows, x = 0, y = 0;
+  float weight = 0.0, start = cols * 0.05;
+  int **forptrs = new int*[path_count];
+  for(path = 0; path < path_count; path++) {
+    forptrs[path] = new int[cols];
+    forptrs[path][x] = path;
+  }
+
+  for(x = 1; x < cols; x++)
+  {
+    if (x > start && weight < WEIGHT_MAX) // ignores the first 5% of the image
+      weight += INCREMENT;
+    for(path = 0; path < rows; path++)
+    {
+      y = forptrs[path][x-1];
+      lowest = img[y][x] - weight;
+      forptrs[path][x] = y;
+      if ( y > 0 && img[y-1][x+1] < lowest ) {
+        lowest = img[y-1][x+1];
+        forptrs[path][x] = y-1;
+      }
+      if ( y < rows-1 && img[y+1][x+1] < lowest ) {
+        forptrs[path][x] = y+1;
+      }
+    }
+  }
+  return forptrs;
 }
 
 int** get_backptrs(int **img, int rows, int cols)
@@ -174,20 +180,40 @@ cv::Mat drawPaths(cv::Mat image, std::vector< std::vector<int> > paths)
 }
 
 
+cv::Mat drawPaths(cv::Mat image, int** paths, int path_count, int width)
+{
+
+  // printf("rows: %d, cols: %d\n", image.rows, image.cols);
+  for(int path = 0; path < path_count; path++)
+  {
+    // cout << "path: " << path << ":\n";
+    image.at<cv::Vec3b>(path, 0) = cv::Vec3b(0, 0, 255);
+    for(int x = 0; x < width; x++)
+    {
+      // cout << "y: " << paths[path][x] << ", x: " << x << ", ";
+      image.at<cv::Vec3b>(paths[path][x], x) = cv::Vec3b(0, 0, 255);
+    }
+    // cout << "\n";
+  }
+  return image;
+
+}
+
+
 cv::Mat drawPaths(cv::Mat image, int** paths, int path_count)
 {
 
   // printf("rows: %d, cols: %d\n", image.rows, image.cols);
   for(int path = 0; path < path_count; path++)
   {
-    cout << "path: " << path << ":\n";
+    // cout << "path: " << path << ":\n";
     image.at<cv::Vec3b>(path, 0) = cv::Vec3b(0, 0, 255);
     for(int x = 1; x < image.cols-1; x++)
     {
-      cout << "y: " << paths[path][x] << ", x: " << x << ", ";
+      // cout << "y: " << paths[path][x] << ", x: " << x << ", ";
       image.at<cv::Vec3b>(paths[path][x-1], x) = cv::Vec3b(0, 0, 255);
     }
-    cout << "\n";
+    // cout << "\n";
   }
   return image;
 
@@ -204,10 +230,12 @@ void draw(cv::Mat image)
 
 int main(int argc, char** argv )
 {
-    if ( argc != 2 )
-    {
-        printf("usage: seamcarver.out <Image_Path>\n");
-        return -1;
+    // printf("argc: %d\n", argc);
+    if (argc == 4) {
+      WEIGHT_MAX = atoi(argv[3]);
+    }else if (argc < 3 || argc > 4) {
+      printf("usage: seamcarver.out <Image_Path> <Output_Path> <Diagnol_Penalty>\n");
+      return -1;
     }
     cv::Mat image;
     cv::Mat imagecolor;
@@ -238,7 +266,7 @@ int main(int argc, char** argv )
     vector<int> compression_params;
     compression_params.push_back(CV_IMWRITE_PNG_COMPRESSION);
     compression_params.push_back(9);
-    cv::imwrite("overdrawn.png", img2, compression_params);
+    cv::imwrite(argv[2], img2, compression_params);
     // cv::namedWindow("Display Image", cv::WINDOW_AUTOSIZE );
     // cv::imshow("Display Image", img2);
     // cv::waitKey(0);
