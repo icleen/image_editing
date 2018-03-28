@@ -96,28 +96,33 @@ int** get_backptrs(int **img, int **paths, int rows, int cols, int &path_count)
 {
   int x = cols-1, y = 0, path = 0, lowest = 0;
   std::map<int, int> uniqs;
-  for(path = 0; path < rows; path++)
-  {
-    if(uniqs.find(paths[path][x]) != uniqs.end()) {
-      uniqs[paths[path][x]] = 1;
-    }else {
-      uniqs[paths[path][x]] += 1;
+  for(path = 0; path < rows; path++) {
+    uniqs[paths[path][x]] = 0;
+  }
+  for(path = 0; path < rows; path++) {
+    uniqs[paths[path][x]] += 1;
+  }
+
+  for(std::map<int,int>::iterator iter = uniqs.begin(); iter != uniqs.end(); ++iter) {
+    printf("%d, ", iter->second);
+    if (iter->second < 10) {
+      uniqs.erase(iter);
     }
   }
 
   path_count = uniqs.size();
   int **backptrs = new int*[path_count];
   std::map<int,int>::iterator iter = uniqs.begin();
-  cout << "lasts:" << '\n';
+  cout << "\nNumber of unique paths: " << path_count << endl;
+  // cout << "lasts:" << '\n';
   for(path = 0; path < path_count; ++path)
   {
     backptrs[path] = new int[cols];
     backptrs[path][cols-1] = iter->first;
-    cout << ", " << iter->first;
     for(x = cols-2; x >= 0; --x)
     {
       y = backptrs[path][x+1];
-      lowest = img[y][x] - WEIGHT_MAX;
+      lowest = img[y][x] - (WEIGHT_MAX);
       backptrs[path][x] = y;
       if ( y > 0 && img[y-1][x] < lowest ) {
         lowest = img[y-1][x];
@@ -129,7 +134,7 @@ int** get_backptrs(int **img, int **paths, int rows, int cols, int &path_count)
     }
     ++iter;
   }
-  cout << endl;
+  // cout << endl;
 
   return backptrs;
 }
