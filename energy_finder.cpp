@@ -2,11 +2,12 @@
 #include <opencv2/opencv.hpp>
 #include <vector>
 #include <algorithm>
+#include <map>
 
 using namespace std;
 
 cv::Mat carve(cv::Mat image, cv::Mat imagecolor);
-int** get_backptrs(int **img, int rows, int cols);
+int** get_backptrs(int **img, int **paths, int rows, int cols, int &path_count);
 int** get_forptrs(int **img, int rows, int cols);
 cv::Mat drawPaths(cv::Mat image, int** paths, int path_count);
 cv::Mat drawPaths(cv::Mat image, int** paths, int path_count, int height);
@@ -32,11 +33,11 @@ cv::Mat carve(cv::Mat image, cv::Mat imagecolor)
     }
   }
 
-  int **ptrs = get_forptrs(img, rows, cols);
-  // printf("finding most frequent\n");
-  // std::vector< std::vector<int> > freq = findMostFreq(ptrs, rows, cols);
+  int **forptrs = get_forptrs(img, rows, cols);
+  int path_count = rows;
+  int **backptrs = get_backptrs(img, forptrs, rows, cols, path_count);
   printf("drawing paths\n");
-  cv::Mat mt = drawPaths(imagecolor, ptrs, rows, cols);
+  cv::Mat mt = drawPaths(imagecolor, backptrs, path_count, cols);
   printf("paths drawn\n");
 
   for(y = 0; y < rows; y++) {
@@ -45,9 +46,14 @@ cv::Mat carve(cv::Mat image, cv::Mat imagecolor)
   delete[] img;
 
   for(y = 0; y < rows; y++) {
-    delete[] ptrs[y];
+    delete[] forptrs[y];
   }
-  delete[] ptrs;
+  delete[] forptrs;
+
+  for(y = 0; y < path_count; y++) {
+    delete[] backptrs[y];
+  }
+  delete[] backptrs;
 
   return mt;
 
@@ -57,7 +63,7 @@ int** get_forptrs(int **img, int rows, int cols)
 {
   printf("getting forptrs; rows: %d, cols: %d\n", rows, cols);
   int lowest = 0, path = 0, path_count = rows, x = 0, y = 0;
-  float weight = 0.0, start = cols * 0.05;
+  // float weight = 0.0, start = cols * 0.05;
   int **forptrs = new int*[path_count];
   for(path = 0; path < path_count; path++) {
     forptrs[path] = new int[cols];
@@ -66,18 +72,19 @@ int** get_forptrs(int **img, int rows, int cols)
 
   for(x = 1; x < cols; x++)
   {
-    if (x > start && weight < WEIGHT_MAX) // ignores the first 5% of the image
-      weight += INCREMENT;
+    // if (x > start && weight < WEIGHT_MAX) // ignores the first 5% of the image
+    //   weight += INCREMENT;
     for(path = 0; path < rows; path++)
     {
       y = forptrs[path][x-1];
-      lowest = img[y][x] - weight;
+      // lowest = img[y][x] - weight;
+      lowest = img[y][x] - WEIGHT_MAX;
       forptrs[path][x] = y;
-      if ( y > 0 && img[y-1][x+1] < lowest ) {
-        lowest = img[y-1][x+1];
+      if ( y > 0 && img[y-1][x] < lowest ) {
+        lowest = img[y-1][x];
         forptrs[path][x] = y-1;
       }
-      if ( y < rows-1 && img[y+1][x+1] < lowest ) {
+      if ( y < rows-1 && img[y+1][x] < lowest ) {
         forptrs[path][x] = y+1;
       }
     }
@@ -85,48 +92,44 @@ int** get_forptrs(int **img, int rows, int cols)
   return forptrs;
 }
 
-int** get_backptrs(int **img, int rows, int cols)
+int** get_backptrs(int **img, int **paths, int rows, int cols, int &path_count)
 {
-  printf("carving seams; rows: %d, cols: %d\n", rows, cols);
-  int lowest = 0, x = 0, y = 0;
-  int **backptrs = new int*[rows];
-  int **cost = new int*[rows];
-  // set the cost of the first col to the initiprintf("rows: %d, cols: %d\n", rows, cols);al pixel values
-  for(y = 0; y < rows; y++) {
-    backptrs[y] = new int[cols] {};
-    cost[y] = new int[cols] {};
-    cost[y][x] = img[y][x];
-  }
-  y = 0;
-  for(x = 1; x < cols; x++) {
-    cost[y][x] = img[y][x] + cost[y][x-1];
-    cost[rows-1][x] = img[rows-1][x] + cost[rows-1][x-1];
-  }
-
-  // printf("creating cost matrix\n");
-  for(x = 1; x < cols; x++)
+  int x = cols-1, y = 0, path = 0, lowest = 0;
+  std::map<int, int> uniqs;
+  for(path = 0; path < rows; path++)
   {
-    for(y = 1; y < rows-1; y++)
-    {
-// find the lowest cost to get to the current pixel
-      lowest = cost[y][x-1];
-      backptrs[y][x] = y;
-      if (cost[y-1][x-1] < lowest) {
-        lowest = cost[y-1][x-1];
-        backptrs[y][x] = y-1;
-      }
-      if (cost[y+1][x-1] < lowest) {
-        lowest = cost[y+1][x-1];
-        backptrs[y][x] = y+1;
-      }
-      cost[y][x] = lowest + img[y][x];
+    if(uniqs.find(paths[path][x]) != uniqs.end()) {
+      uniqs[paths[path][x]] = 1;
+    }else {
+      uniqs[paths[path][x]] += 1;
     }
   }
 
-  for(y = 0; y < rows; y++) {
-    delete[] cost[y];
+  path_count = uniqs.size();
+  int **backptrs = new int*[path_count];
+  std::map<int,int>::iterator iter = uniqs.begin();
+  cout << "lasts:" << '\n';
+  for(path = 0; path < path_count; ++path)
+  {
+    backptrs[path] = new int[cols];
+    backptrs[path][cols-1] = iter->first;
+    cout << ", " << iter->first;
+    for(x = cols-2; x >= 0; --x)
+    {
+      y = backptrs[path][x+1];
+      lowest = img[y][x] - WEIGHT_MAX;
+      backptrs[path][x] = y;
+      if ( y > 0 && img[y-1][x] < lowest ) {
+        lowest = img[y-1][x];
+        backptrs[path][x] = y-1;
+      }
+      if ( y < rows-1 && img[y+1][x] < lowest ) {
+        backptrs[path][x] = y+1;
+      }
+    }
+    ++iter;
   }
-  delete[] cost;
+  cout << endl;
 
   return backptrs;
 }
@@ -230,46 +233,47 @@ void draw(cv::Mat image)
 
 int main(int argc, char** argv )
 {
-    // printf("argc: %d\n", argc);
-    if (argc == 4) {
-      WEIGHT_MAX = atoi(argv[3]);
-    }else if (argc < 3 || argc > 4) {
-      printf("usage: seamcarver.out <Image_Path> <Output_Path> <Diagnol_Penalty>\n");
+
+  // printf("argc: %d\n", argc);
+  if (argc == 4) {
+    WEIGHT_MAX = atoi(argv[3]);
+  }else if (argc < 3 || argc > 4) {
+    printf("usage: seamcarver.out <Image_Path> <Output_Path> <Diagnol_Penalty>\n");
+    return -1;
+  }
+  cv::Mat image;
+  cv::Mat imagecolor;
+  image = cv::imread( argv[1], 0 );
+  imagecolor = cv::imread( argv[1], 1 );
+  if ( !image.data )
+  {
+      printf("No image data \n");
       return -1;
-    }
-    cv::Mat image;
-    cv::Mat imagecolor;
-    image = cv::imread( argv[1], 0 );
-    imagecolor = cv::imread( argv[1], 1 );
-    if ( !image.data )
-    {
-        printf("No image data \n");
-        return -1;
-    }
+  }
 
-    cv::Mat image2(image.rows/4, image.cols/4, image.type());
-    cv::Mat image2color(imagecolor.rows/4, imagecolor.cols/4, image.type());
-    // cv::Mat image2(100, 120, image.type());
-    cv::resize(image, image2, image2.size(), 0, 0, cv::INTER_LINEAR);
-    cv::resize(imagecolor, image2color, image2.size(), 0, 0, cv::INTER_LINEAR);
+  cv::Mat image2(image.rows/4, image.cols/4, image.type());
+  cv::Mat image2color(imagecolor.rows/4, imagecolor.cols/4, image.type());
+  // cv::Mat image2(100, 120, image.type());
+  cv::resize(image, image2, image2.size(), 0, 0, cv::INTER_LINEAR);
+  cv::resize(imagecolor, image2color, image2.size(), 0, 0, cv::INTER_LINEAR);
 
-    printf("rows: %d, cols: %d\n", image2.rows, image2.cols);
+  printf("rows: %d, cols: %d\n", image2.rows, image2.cols);
 
-    cv::Mat img2;
-    printf("Carving\n");
-    img2 = carve(image2, image2color);
+  cv::Mat img2;
+  printf("Carving\n");
+  img2 = carve(image2, image2color);
 
-    printf("done carving\n");
-    printf("rows: %d, cols: %d\n", img2.rows, img2.cols);
+  printf("done carving\n");
+  printf("rows: %d, cols: %d\n", img2.rows, img2.cols);
 
 
-    vector<int> compression_params;
-    compression_params.push_back(CV_IMWRITE_PNG_COMPRESSION);
-    compression_params.push_back(9);
-    cv::imwrite(argv[2], img2, compression_params);
-    // cv::namedWindow("Display Image", cv::WINDOW_AUTOSIZE );
-    // cv::imshow("Display Image", img2);
-    // cv::waitKey(0);
+  vector<int> compression_params;
+  compression_params.push_back(CV_IMWRITE_PNG_COMPRESSION);
+  compression_params.push_back(9);
+  cv::imwrite(argv[2], img2, compression_params);
+  // cv::namedWindow("Display Image", cv::WINDOW_AUTOSIZE );
+  // cv::imshow("Display Image", img2);
+  // cv::waitKey(0);
 
-    return 0;
+  return 0;
 }
