@@ -1,12 +1,16 @@
 #include <stdio.h>
 #include <opencv2/opencv.hpp>
+#include <vector>
+#include <algorithm>
 
 using namespace std;
 
 cv::Mat carve(cv::Mat image);
 int** get_backptrs(int **img, int rows, int cols);
 cv::Mat drawPaths(cv::Mat image, int** paths, int path_count);
+cv::Mat drawPaths(cv::Mat image, std::vector< std::vector<int> > paths);
 void draw(cv::Mat image);
+std::vector< std::vector<int> > findMostFreq(int** paths, int path_count, int cols);
 
 
 cv::Mat carve(cv::Mat image)
@@ -25,7 +29,11 @@ cv::Mat carve(cv::Mat image)
   }
 
   int **ptrs = get_backptrs(img, rows, cols);
-  cv::Mat mt = drawPaths(image, ptrs, rows);
+  printf("finding most frequent\n");
+  std::vector< std::vector<int> > freq = findMostFreq(ptrs, rows, cols);
+  printf("drawing paths\n");
+  cv::Mat mt = drawPaths(image, freq);
+  printf("paths drawn\n");
 
   for(y = 0; y < rows; y++) {
     delete[] img[y];
@@ -79,17 +87,6 @@ int** get_backptrs(int **img, int rows, int cols)
     }
   }
 
-  // cout << "Cost Matrix:\n";
-  // for(y = 0; y < rows; y++)
-  // {
-  //   for(x = 0; x < cols; x++)
-  //   {
-  //     cout << cost[y][x] << ",";
-  //   }
-  //   cout << endl;
-  // }
-  // cout << endl;
-
   for(y = 0; y < rows; y++) {
     delete[] cost[y];
   }
@@ -98,20 +95,69 @@ int** get_backptrs(int **img, int rows, int cols)
   return backptrs;
 }
 
+std::vector< std::vector<int> > findMostFreq(int** paths, int path_count, int cols)
+{
+
+  int **img = new int*[path_count+2];
+  int path, x, y;
+  for(y = 0; y < path_count+2; y++) {
+    img[y] = new int[cols] {};
+  }
+
+  for(path = 0; path < path_count; path++)
+  {
+    for(x = cols-1; x > 0; x--)
+    {
+      img[paths[path][x]][x-1] += 1;
+    }
+  }
+
+  std::vector< std::vector<int> > freq(cols-1);
+
+  for(x = 0; x < cols-1; x++)
+  {
+    for(y = 0; y < path_count+2; y++)
+    {
+      if(img[y][x] > 2) {
+        freq[x].push_back(y);
+      }
+    }
+  }
+  return freq;
+
+}
+
+cv::Mat drawPaths(cv::Mat image, std::vector< std::vector<int> > paths)
+{
+
+  int cols = paths[0].size();
+  for(int x = 0; x < paths.size(); x++)
+  {
+    for(int y = 0; y < paths[x].size(); y++)
+    {
+      // image.at<cv::Vec3b>(paths[x][y], x) = cv::Vec3b(0, 0, 255);
+      image.at<uchar>(paths[x][y], x) = uchar(255);
+    }
+  }
+  return image;
+
+}
+
 
 cv::Mat drawPaths(cv::Mat image, int** paths, int path_count)
 {
 
-  printf("rows: %d, cols: %d\n", image.rows, image.cols);
+  // printf("rows: %d, cols: %d\n", image.rows, image.cols);
   for(int path = 0; path < path_count; path++)
   {
-    cout << "path: " << path << ":";
-    for(int x = 0; x < image.cols; x++)
+    // cout << "path: " << path << ":";
+    image.at<cv::Vec3b>(path, image.cols-1) = cv::Vec3b(0, 0, 255);
+    for(int x = image.cols-1; x > 0; x--)
     {
-      cout << "y: " << paths[path][x] << ", x: " << x << ", ";
-      image.at<cv::Vec3b>(paths[path][x], x) = cv::Vec3b(0, 0, 255);
+      // cout << "y: " << paths[path][x] << ", x: " << x << ", ";
+      image.at<cv::Vec3b>(paths[path][x], x-1) = cv::Vec3b(0, 0, 255);
     }
-    cout << "\n";
+    // cout << "\n";
   }
   return image;
 
@@ -134,14 +180,14 @@ int main(int argc, char** argv )
         return -1;
     }
     cv::Mat image;
-    image = cv::imread( argv[1], cv::IMREAD_COLOR );
+    image = cv::imread( argv[1], 0 );
     if ( !image.data )
     {
         printf("No image data \n");
         return -1;
     }
 
-    cv::Mat image2(image.rows/2, image.cols/2, image.type());
+    cv::Mat image2(image.rows/4, image.cols/4, image.type());
     // cv::Mat image2(100, 120, image.type());
     cv:resize(image, image2, image2.size(), 0, 0, cv::INTER_LINEAR);
 
