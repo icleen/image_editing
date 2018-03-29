@@ -262,20 +262,25 @@ int main(int argc, char** argv )
   cv::resize(image, image2, image2.size(), 0, 0, cv::INTER_LINEAR);
   cv::resize(imagecolor, image2color, image2.size(), 0, 0, cv::INTER_LINEAR);
 
-  printf("rows: %d, cols: %d\n", image2.rows, image2.cols);
-
   cv::Mat img2;
   printf("Carving\n");
   img2 = carve(image2, image2color);
 
   printf("done carving\n");
-  printf("rows: %d, cols: %d\n", img2.rows, img2.cols);
 
+  cv::Mat image3;
+  cv::transpose(image2, image3);
+  cv::Mat img3;
+  cv::transpose(img2, img3);
+  img3 = carve(image3, img3);
+
+  cv::Mat outImg;
+  cv::transpose(img3, outImg);
 
   vector<int> compression_params;
   compression_params.push_back(CV_IMWRITE_PNG_COMPRESSION);
   compression_params.push_back(9);
-  cv::imwrite(argv[2], img2, compression_params);
+  cv::imwrite(argv[2], outImg, compression_params);
   // cv::namedWindow("Display Image", cv::WINDOW_AUTOSIZE );
   // cv::imshow("Display Image", img2);
   // cv::waitKey(0);
