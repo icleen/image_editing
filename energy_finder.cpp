@@ -2,6 +2,7 @@
 #include <opencv2/opencv.hpp>
 #include <vector>
 #include <algorithm>
+#include <cmath>
 #include <map>
 #include <string.h>
 #include "dirent.h"
@@ -9,8 +10,10 @@
 using namespace std;
 
 cv::Mat carve(cv::Mat image, cv::Mat imagecolor);
-int** get_backptrs(int **img, int **paths, int rows, int cols, int &path_count);
-int** get_forptrs(int **img, int rows, int cols);
+double** get_cost(int **img, int rows, int cols);
+double** get_costfor(int **img, int rows, int cols);
+int** get_backptrs(double **img, int **paths, int rows, int cols, int &path_count);
+int** get_forptrs(double **img, int rows, int cols);
 cv::Mat drawPaths(cv::Mat image, int** paths, int path_count);
 cv::Mat drawPaths(cv::Mat image, int** paths, int path_count, int height);
 cv::Mat drawPaths(cv::Mat image, std::vector< std::vector<int> > paths);
@@ -18,6 +21,7 @@ void draw(cv::Mat image);
 std::vector< std::vector<int> > findMostFreq(int** paths, int path_count, int cols);
 
 int WEIGHT_MAX = 20;
+int FUNCTION = 0;
 float INCREMENT = 0.15;
 
 cv::Mat carve(cv::Mat image, cv::Mat imagecolor)
@@ -35,12 +39,19 @@ cv::Mat carve(cv::Mat image, cv::Mat imagecolor)
     }
   }
 
-  int **forptrs = get_forptrs(img, rows, cols);
+  double **cost = get_cost(img, rows, cols);
+  int **forptrs = get_forptrs(cost, rows, cols);
   int path_count = rows;
-  int **backptrs = get_backptrs(img, forptrs, rows, cols, path_count);
-  // printf("drawing paths\n");
-  cv::Mat mt = drawPaths(imagecolor, backptrs, path_count, cols);
-  // printf("paths drawn\n");
+
+  // for(y = 0; y < rows; y++) {
+  //   delete[] cost[y];
+  // }
+  // delete[] cost;
+  // cost = get_costfor(img, rows, cols);
+  // int **backptrs = get_backptrs(cost, forptrs, rows, cols, path_count);
+  // cv::Mat mt = drawPaths(imagecolor, backptrs, path_count, cols);
+  
+  cv::Mat mt = drawPaths(imagecolor, forptrs, path_count, cols);
 
   for(y = 0; y < rows; y++) {
     delete[] img[y];
@@ -48,23 +59,114 @@ cv::Mat carve(cv::Mat image, cv::Mat imagecolor)
   delete[] img;
 
   for(y = 0; y < rows; y++) {
+    delete[] cost[y];
+  }
+  delete[] cost;
+
+  for(y = 0; y < rows; y++) {
     delete[] forptrs[y];
   }
   delete[] forptrs;
 
-  for(y = 0; y < path_count; y++) {
-    delete[] backptrs[y];
-  }
-  delete[] backptrs;
+  // for(y = 0; y < path_count; y++) {
+  //   delete[] backptrs[y];
+  // }
+  // delete[] backptrs;
 
   return mt;
 
 }
 
-int** get_forptrs(int **img, int rows, int cols)
+double interpolation(int x, int f)
+{
+  if(f == 0) {
+    return x * 1.0;
+  }else if (f == 1) {
+    return (x * 1.0) / (1 + abs(x * 1.0));
+  }else if (f == 2) {
+    return x * x * 1.0;
+  }else if (f == 3) {
+    return exp(x);
+  }else if (f == 4) {
+    return 1 / (1 + exp(x * -1.0));
+  }
+}
+
+double** get_cost(int **img, int rows, int cols)
+{
+
+  double lowest;
+  int y, x = cols-1, f = FUNCTION;
+  double **cost = new double*[rows];
+  for(y = 0; y < rows; ++y) {
+    cost[y] = new double[cols];
+    cost[y][x] = interpolation(img[y][x], f);
+  }
+  y = rows-1;
+  for(x = cols-2; x >= 0; --x) {
+    cost[0][x] = interpolation(img[0][x], f) + cost[0][x+1] + WEIGHT_MAX;
+    cost[y][x] = interpolation(img[y][x], f) + cost[y][x+1] + WEIGHT_MAX;
+  }
+
+  for(x = cols-2; x >= 0; --x)
+  {
+    for(y = 1; y < rows-1; ++y)
+    {
+      lowest = cost[y][x+1];
+      if(cost[y-1][x+1] + WEIGHT_MAX < lowest) {
+        lowest = cost[y-1][x+1];
+      }if(cost[y+1][x+1] + WEIGHT_MAX < lowest) {
+        lowest = cost[y+1][x+1];
+      }
+      cost[y][x] = lowest + interpolation(img[y][x], f);
+      // cost[y][x] = interpolation(img[y][x], f);
+    }
+  }
+
+  return cost;
+
+}
+
+double** get_costfor(int **img, int rows, int cols)
+{
+
+  double lowest;
+  int y, x = 0, f = FUNCTION;
+  double **cost = new double*[rows];
+  for(y = 0; y < rows; ++y) {
+    cost[y] = new double[cols];
+    cost[y][x] = interpolation(img[y][x], f);
+  }
+  y = rows-1;
+  for(x = 1; x < cols; ++x) {
+    cost[0][x] = interpolation(img[0][x], f) + cost[0][x-1] + WEIGHT_MAX;
+    cost[y][x] = interpolation(img[y][x], f) + cost[y][x-1] + WEIGHT_MAX;
+  }
+
+  for(x = 1; x < cols; ++x)
+  {
+    for(y = 1; y < rows-1; ++y)
+    {
+      lowest = cost[y][x-1];
+      if(cost[y-1][x-1] + WEIGHT_MAX < lowest) {
+        lowest = cost[y-1][x-1];
+      }if(cost[y+1][x-1] + WEIGHT_MAX < lowest) {
+        lowest = cost[y+1][x-1];
+      }
+      cost[y][x] = lowest + interpolation(img[y][x], f);
+      // cost[y][x] = interpolation(img[y][x], f);
+    }
+  }
+
+  return cost;
+
+}
+
+int** get_forptrs(double **img, int rows, int cols)
 {
   // printf("getting forptrs; rows: %d, cols: %d\n", rows, cols);
-  int lowest = 0, path = 0, path_count = rows, x = 0, y = 0;
+  double lowest = 0;
+  int path = 0, path_count = rows, x = 0, y = 0;
   // float weight = 0.0, start = cols * 0.05;
   int **forptrs = new int*[path_count];
   for(path = 0; path < path_count; path++) {
@@ -80,7 +182,7 @@ int** get_forptrs(int **img, int rows, int cols)
     {
       y = forptrs[path][x-1];
       // lowest = img[y][x] - weight;
-      lowest = img[y][x] - WEIGHT_MAX;
+      lowest = img[y][x];
       forptrs[path][x] = y;
       if ( y > 0 && img[y-1][x] < lowest ) {
         lowest = img[y-1][x];
@@ -94,7 +196,7 @@ int** get_forptrs(int **img, int rows, int cols)
   return forptrs;
 }
 
-int** get_backptrs(int **img, int **paths, int rows, int cols, int &path_count)
+int** get_backptrs(double **img, int **paths, int rows, int cols, int &path_count)
 {
   int x = cols-1, y = 0, path = 0, lowest = 0;
   std::map<int, int> uniqs;
@@ -107,7 +209,7 @@ int** get_backptrs(int **img, int **paths, int rows, int cols, int &path_count)
 
   for(std::map<int,int>::iterator iter = uniqs.begin(); iter != uniqs.end(); ++iter) {
     // printf("%d, ", iter->second);
-    if (iter->second < 10) {
+    if (iter->second < 1) {
       uniqs.erase(iter);
     }
   }
@@ -285,7 +387,10 @@ int main(int argc, char** argv )
   // printf("argc: %d\n", argc);
   if (argc == 4) {
     WEIGHT_MAX = atoi(argv[3]);
-  }else if (argc < 3 || argc > 4) {
+  }else if (argc == 5) {
+    WEIGHT_MAX = atoi(argv[3]);
+    FUNCTION = atoi(argv[4]);
+  }else if (argc < 3 || argc > 5) {
     printf("usage: EnergyFinder.out <Images_Folder> <Output_Folder> <Diagnol_Penalty>\n");
     return -1;
   }
