@@ -3,6 +3,8 @@
 #include <vector>
 #include <algorithm>
 #include <map>
+#include <string.h>
+#include "dirent.h"
 
 using namespace std;
 
@@ -22,7 +24,7 @@ cv::Mat carve(cv::Mat image, cv::Mat imagecolor)
 {
 
   int rows = image.rows, cols = image.cols, x, y;
-  printf("rows: %d, cols: %d\n", rows, cols);
+  // printf("rows: %d, cols: %d\n", rows, cols);
   int **img = new int*[rows];
   for(y = 0; y < rows; y++)
   {
@@ -36,9 +38,9 @@ cv::Mat carve(cv::Mat image, cv::Mat imagecolor)
   int **forptrs = get_forptrs(img, rows, cols);
   int path_count = rows;
   int **backptrs = get_backptrs(img, forptrs, rows, cols, path_count);
-  printf("drawing paths\n");
+  // printf("drawing paths\n");
   cv::Mat mt = drawPaths(imagecolor, backptrs, path_count, cols);
-  printf("paths drawn\n");
+  // printf("paths drawn\n");
 
   for(y = 0; y < rows; y++) {
     delete[] img[y];
@@ -61,7 +63,7 @@ cv::Mat carve(cv::Mat image, cv::Mat imagecolor)
 
 int** get_forptrs(int **img, int rows, int cols)
 {
-  printf("getting forptrs; rows: %d, cols: %d\n", rows, cols);
+  // printf("getting forptrs; rows: %d, cols: %d\n", rows, cols);
   int lowest = 0, path = 0, path_count = rows, x = 0, y = 0;
   // float weight = 0.0, start = cols * 0.05;
   int **forptrs = new int*[path_count];
@@ -104,17 +106,17 @@ int** get_backptrs(int **img, int **paths, int rows, int cols, int &path_count)
   }
 
   for(std::map<int,int>::iterator iter = uniqs.begin(); iter != uniqs.end(); ++iter) {
-    printf("%d, ", iter->second);
+    // printf("%d, ", iter->second);
     if (iter->second < 10) {
       uniqs.erase(iter);
     }
   }
+  // cout << endl;
 
   path_count = uniqs.size();
   int **backptrs = new int*[path_count];
   std::map<int,int>::iterator iter = uniqs.begin();
-  cout << "\nNumber of unique paths: " << path_count << endl;
-  // cout << "lasts:" << '\n';
+  cout << "Number of unique paths: " << path_count << endl;
   for(path = 0; path < path_count; ++path)
   {
     backptrs[path] = new int[cols];
@@ -236,37 +238,30 @@ void draw(cv::Mat image)
 
 }
 
-int main(int argc, char** argv )
+void write_lines(string imgfile, string outfile)
 {
-
-  // printf("argc: %d\n", argc);
-  if (argc == 4) {
-    WEIGHT_MAX = atoi(argv[3]);
-  }else if (argc < 3 || argc > 4) {
-    printf("usage: seamcarver.out <Image_Path> <Output_Path> <Diagnol_Penalty>\n");
-    return -1;
-  }
   cv::Mat image;
   cv::Mat imagecolor;
-  image = cv::imread( argv[1], 0 );
-  imagecolor = cv::imread( argv[1], 1 );
-  if ( !image.data )
-  {
+  try {
+    image = cv::imread( imgfile.c_str(), 0 );
+    imagecolor = cv::imread( imgfile.c_str(), 1 );
+  }catch(...) {
+    printf("No image data \n");
+    return;
+  }if( !image.data ) {
       printf("No image data \n");
-      return -1;
+      return;
   }
+
+  cout << "infile: " << imgfile << endl;
 
   cv::Mat image2(image.rows/4, image.cols/4, image.type());
   cv::Mat image2color(imagecolor.rows/4, imagecolor.cols/4, image.type());
-  // cv::Mat image2(100, 120, image.type());
   cv::resize(image, image2, image2.size(), 0, 0, cv::INTER_LINEAR);
   cv::resize(imagecolor, image2color, image2.size(), 0, 0, cv::INTER_LINEAR);
 
   cv::Mat img2;
-  printf("Carving\n");
   img2 = carve(image2, image2color);
-
-  printf("done carving\n");
 
   cv::Mat image3;
   cv::transpose(image2, image3);
@@ -280,10 +275,40 @@ int main(int argc, char** argv )
   vector<int> compression_params;
   compression_params.push_back(CV_IMWRITE_PNG_COMPRESSION);
   compression_params.push_back(9);
-  cv::imwrite(argv[2], outImg, compression_params);
-  // cv::namedWindow("Display Image", cv::WINDOW_AUTOSIZE );
-  // cv::imshow("Display Image", img2);
-  // cv::waitKey(0);
+  cv::imwrite(outfile.c_str(), outImg, compression_params);
+  cout << "outfile: " << outfile << endl;
+}
+
+int main(int argc, char** argv )
+{
+
+  // printf("argc: %d\n", argc);
+  if (argc == 4) {
+    WEIGHT_MAX = atoi(argv[3]);
+  }else if (argc < 3 || argc > 4) {
+    printf("usage: EnergyFinder.out <Images_Folder> <Output_Folder> <Diagnol_Penalty>\n");
+    return -1;
+  }
+
+  DIR *dir;
+  struct dirent *ent;
+  string input;
+  string output;
+  if( (dir = opendir(argv[1])) != NULL ) {
+    /* print all the files and directories within directory */
+    while( (ent = readdir(dir)) != NULL ) {
+      input = argv[1] + (string) ent->d_name;
+      output = argv[2] + (string) ent->d_name;
+      write_lines(input, output);
+    }
+    closedir (dir);
+  }else {
+    /* could not open directory */
+    perror ("");
+    return EXIT_FAILURE;
+  }
+
+  // write_lines(argv[1], argv[2]);
 
   return 0;
 }
