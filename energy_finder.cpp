@@ -50,7 +50,7 @@ cv::Mat carve(cv::Mat image, cv::Mat imagecolor)
   // cost = get_costfor(img, rows, cols);
   // int **backptrs = get_backptrs(cost, forptrs, rows, cols, path_count);
   // cv::Mat mt = drawPaths(imagecolor, backptrs, path_count, cols);
-  
+
   cv::Mat mt = drawPaths(imagecolor, forptrs, path_count, cols);
 
   for(y = 0; y < rows; y++) {
@@ -96,11 +96,12 @@ double** get_cost(int **img, int rows, int cols)
 {
 
   double lowest;
+  int five = rows * 0.05;
   int y, x = cols-1, f = FUNCTION;
   double **cost = new double*[rows];
   for(y = 0; y < rows; ++y) {
     cost[y] = new double[cols];
-    cost[y][x] = interpolation(img[y][x], f);
+    cost[y][cols-1] = interpolation(img[y][x], f);
   }
   y = rows-1;
   for(x = cols-2; x >= 0; --x) {
@@ -118,10 +119,21 @@ double** get_cost(int **img, int rows, int cols)
       }if(cost[y+1][x+1] + WEIGHT_MAX < lowest) {
         lowest = cost[y+1][x+1];
       }
-      cost[y][x] = lowest + interpolation(img[y][x], f);
+      if (y < five || y >= rows-five) {
+        cost[y][x] = lowest + interpolation(255, f) + WEIGHT_MAX;
+      }else {
+        cost[y][x] = lowest + interpolation(img[y][x], f);
+      }
       // cost[y][x] = interpolation(img[y][x], f);
     }
   }
+
+  x = cols/2;
+  cout << "Cost Matrix:\n";
+  for(y = 0; y < rows; ++y) {
+    cout << ", " << cost[y][x];
+  }
+  cout << endl;
 
   return cost;
 
@@ -135,7 +147,7 @@ double** get_costfor(int **img, int rows, int cols)
   double **cost = new double*[rows];
   for(y = 0; y < rows; ++y) {
     cost[y] = new double[cols];
-    cost[y][x] = interpolation(img[y][x], f);
+    cost[y][0] = interpolation(img[y][x], f);
   }
   y = rows-1;
   for(x = 1; x < cols; ++x) {
