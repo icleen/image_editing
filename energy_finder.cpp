@@ -102,6 +102,9 @@ double** get_cost(int **img, int rows, int cols)
   for(y = 0; y < rows; ++y) {
     cost[y] = new double[cols];
     cost[y][cols-1] = interpolation(img[y][x], f);
+    if (y % five == 0) {
+      cost[y][cols-1] += WEIGHT_MAX;
+    }
   }
   y = rows-1;
   for(x = cols-2; x >= 0; --x) {
@@ -109,22 +112,26 @@ double** get_cost(int **img, int rows, int cols)
     cost[y][x] = interpolation(img[y][x], f) + cost[y][x+1] + WEIGHT_MAX;
   }
 
+  int section = 1;
+
   for(x = cols-2; x >= 0; --x)
   {
     for(y = 1; y < rows-1; ++y)
     {
-      lowest = cost[y][x+1];
-      if(cost[y-1][x+1] + WEIGHT_MAX < lowest) {
-        lowest = cost[y-1][x+1];
-      }if(cost[y+1][x+1] + WEIGHT_MAX < lowest) {
-        lowest = cost[y+1][x+1];
+      if (y % five == 0)
+      {
+        cost[y][x] = cost[y][x+1] + interpolation(255, f) + WEIGHT_MAX;
       }
-      if (y < five || y >= rows-five) {
-        cost[y][x] = lowest + interpolation(255, f) + WEIGHT_MAX;
-      }else {
+      else
+      {
+        lowest = cost[y][x+1];
+        if(cost[y-1][x+1] + WEIGHT_MAX < lowest) {
+          lowest = cost[y-1][x+1];
+        }if(cost[y+1][x+1] + WEIGHT_MAX < lowest) {
+          lowest = cost[y+1][x+1];
+        }
         cost[y][x] = lowest + interpolation(img[y][x], f);
       }
-      // cost[y][x] = interpolation(img[y][x], f);
     }
   }
 
@@ -306,7 +313,7 @@ cv::Mat drawPaths(cv::Mat image, std::vector< std::vector<int> > paths)
 
 cv::Mat drawPaths(cv::Mat image, int** paths, int path_count, int width)
 {
-
+  int five = path_count * 0.05;
   // printf("rows: %d, cols: %d\n", image.rows, image.cols);
   for(int path = 0; path < path_count; path++)
   {
@@ -316,6 +323,9 @@ cv::Mat drawPaths(cv::Mat image, int** paths, int path_count, int width)
     {
       // cout << "y: " << paths[path][x] << ", x: " << x << ", ";
       image.at<cv::Vec3b>(paths[path][x], x) = cv::Vec3b(0, 0, 255);
+      if (path % five == 0) {
+        image.at<cv::Vec3b>(path, x) = cv::Vec3b(255, 0, 0);
+      }
     }
     // cout << "\n";
   }
@@ -377,14 +387,15 @@ void write_lines(string imgfile, string outfile)
   cv::Mat img2;
   img2 = carve(image2, image2color);
 
-  cv::Mat image3;
-  cv::transpose(image2, image3);
-  cv::Mat img3;
-  cv::transpose(img2, img3);
-  img3 = carve(image3, img3);
+  // cv::Mat image3;
+  // cv::transpose(image2, image3);
+  // cv::Mat img3;
+  // cv::transpose(img2, img3);
+  // img3 = carve(image3, img3);
 
   cv::Mat outImg;
-  cv::transpose(img3, outImg);
+  // cv::transpose(img3, outImg);
+  outImg = img2;
 
   vector<int> compression_params;
   compression_params.push_back(CV_IMWRITE_PNG_COMPRESSION);
