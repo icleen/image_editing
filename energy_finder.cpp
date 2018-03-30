@@ -10,10 +10,12 @@
 using namespace std;
 
 cv::Mat carve(cv::Mat image, cv::Mat imagecolor);
+double** get_cost_temp(int **img, int rows, int cols);
 double** get_cost(int **img, int rows, int cols);
 double** get_costfor(int **img, int rows, int cols);
 int** get_backptrs(double **img, int **paths, int rows, int cols, int &path_count);
 int** get_forptrs(double **img, int rows, int cols);
+int** get_forptrs2(int rows, int cols);
 cv::Mat drawPaths(cv::Mat image, int** paths, int path_count);
 cv::Mat drawPaths(cv::Mat image, int** paths, int path_count, int height);
 cv::Mat drawPaths(cv::Mat image, std::vector< std::vector<int> > paths);
@@ -39,8 +41,11 @@ cv::Mat carve(cv::Mat image, cv::Mat imagecolor)
     }
   }
 
-  double **cost = get_cost(img, rows, cols);
+  double **cost;
+  // cost = get_cost_temp(img, rows, cols);
+  cost = get_cost(img, rows, cols);
   int **forptrs = get_forptrs(cost, rows, cols);
+  // int **forptrs = get_forptrs2(rows, cols);
   int path_count = rows;
 
   // for(y = 0; y < rows; y++) {
@@ -50,6 +55,10 @@ cv::Mat carve(cv::Mat image, cv::Mat imagecolor)
   // cost = get_costfor(img, rows, cols);
   // int **backptrs = get_backptrs(cost, forptrs, rows, cols, path_count);
   // cv::Mat mt = drawPaths(imagecolor, backptrs, path_count, cols);
+  // for(y = 0; y < path_count; y++) {
+  //   delete[] backptrs[y];
+  // }
+  // delete[] backptrs;
 
   cv::Mat mt = drawPaths(imagecolor, forptrs, path_count, cols);
 
@@ -68,13 +77,20 @@ cv::Mat carve(cv::Mat image, cv::Mat imagecolor)
   }
   delete[] forptrs;
 
-  // for(y = 0; y < path_count; y++) {
-  //   delete[] backptrs[y];
-  // }
-  // delete[] backptrs;
-
   return mt;
 
+}
+
+int** get_forptrs2(int rows, int cols)
+{
+  int x,y, **out = new int*[rows];
+  for(y = 0; y < rows; ++y) {
+    out[y] = new int[cols];
+    for(x = 0; x < cols; ++x) {
+      out[y][x] = y;
+    }
+  }
+  return out;
 }
 
 double interpolation(int x, int f)
@@ -92,11 +108,26 @@ double interpolation(int x, int f)
   }
 }
 
+double** get_cost_temp(int **img, int rows, int cols)
+{
+  int y, x;
+  double **cost = new double*[rows];
+  for(y = 0; y < rows; y++)
+  {
+    cost[y] = new double[cols];
+    for(x = 0; x < cols; x++)
+    {
+      cost[y][x] = img[y][x] * 1.0;
+    }
+  }
+  return cost;
+}
+
 double** get_cost(int **img, int rows, int cols)
 {
 
   double lowest;
-  int five = rows * 0.05;
+  int five = rows * 0.02;
   int y, x = cols-1, f = FUNCTION;
   double **cost = new double*[rows];
   for(y = 0; y < rows; ++y) {
@@ -135,12 +166,12 @@ double** get_cost(int **img, int rows, int cols)
     }
   }
 
-  x = cols/2;
-  cout << "Cost Matrix:\n";
-  for(y = 0; y < rows; ++y) {
-    cout << ", " << cost[y][x];
-  }
-  cout << endl;
+  // x = cols/2;
+  // cout << "Cost Matrix:\n";
+  // for(y = 0; y < rows; ++y) {
+  //   cout << ", " << cost[y][x];
+  // }
+  // cout << endl;
 
   return cost;
 
@@ -150,11 +181,15 @@ double** get_costfor(int **img, int rows, int cols)
 {
 
   double lowest;
+  int five = rows * 0.05;
   int y, x = 0, f = FUNCTION;
   double **cost = new double*[rows];
   for(y = 0; y < rows; ++y) {
     cost[y] = new double[cols];
     cost[y][0] = interpolation(img[y][x], f);
+    if (y % five == 0) {
+      cost[y][0] += WEIGHT_MAX;
+    }
   }
   y = rows-1;
   for(x = 1; x < cols; ++x) {
@@ -166,14 +201,21 @@ double** get_costfor(int **img, int rows, int cols)
   {
     for(y = 1; y < rows-1; ++y)
     {
-      lowest = cost[y][x-1];
-      if(cost[y-1][x-1] + WEIGHT_MAX < lowest) {
-        lowest = cost[y-1][x-1];
-      }if(cost[y+1][x-1] + WEIGHT_MAX < lowest) {
-        lowest = cost[y+1][x-1];
+      // if (y % five == 0)
+      if (false)
+      {
+        cost[y][x] = cost[y][x-1] + interpolation(255, f) + WEIGHT_MAX;
       }
-      cost[y][x] = lowest + interpolation(img[y][x], f);
-      // cost[y][x] = interpolation(img[y][x], f);
+      else
+      {
+        lowest = cost[y][x-1];
+        if(cost[y-1][x-1] + WEIGHT_MAX < lowest) {
+          lowest = cost[y-1][x-1];
+        }if(cost[y+1][x-1] + WEIGHT_MAX < lowest) {
+          lowest = cost[y+1][x-1];
+        }
+        cost[y][x] = lowest + interpolation(img[y][x], f);
+      }
     }
   }
 
@@ -226,12 +268,12 @@ int** get_backptrs(double **img, int **paths, int rows, int cols, int &path_coun
     uniqs[paths[path][x]] += 1;
   }
 
-  for(std::map<int,int>::iterator iter = uniqs.begin(); iter != uniqs.end(); ++iter) {
-    // printf("%d, ", iter->second);
-    if (iter->second < 1) {
-      uniqs.erase(iter);
-    }
-  }
+  // for(std::map<int,int>::iterator iter = uniqs.begin(); iter != uniqs.end(); ++iter) {
+  //   // printf("%d, ", iter->second);
+  //   if (iter->second < 2) {
+  //     uniqs.erase(iter);
+  //   }
+  // }
   // cout << endl;
 
   path_count = uniqs.size();
@@ -313,7 +355,7 @@ cv::Mat drawPaths(cv::Mat image, std::vector< std::vector<int> > paths)
 
 cv::Mat drawPaths(cv::Mat image, int** paths, int path_count, int width)
 {
-  int five = path_count * 0.05;
+  int five = path_count * 0.02;
   // printf("rows: %d, cols: %d\n", image.rows, image.cols);
   for(int path = 0; path < path_count; path++)
   {
@@ -370,10 +412,10 @@ void write_lines(string imgfile, string outfile)
     image = cv::imread( imgfile.c_str(), 0 );
     imagecolor = cv::imread( imgfile.c_str(), 1 );
   }catch(...) {
-    printf("No image data \n");
+    // printf("No image data: %s \n", imgfile.c_str());
     return;
   }if( !image.data ) {
-      printf("No image data \n");
+      // printf("No image data: %s \n", imgfile.c_str());
       return;
   }
 
@@ -400,7 +442,7 @@ void write_lines(string imgfile, string outfile)
   vector<int> compression_params;
   compression_params.push_back(CV_IMWRITE_PNG_COMPRESSION);
   compression_params.push_back(9);
-  cv::imwrite(outfile.c_str(), outImg, compression_params);
+  cout << cv::imwrite(outfile.c_str(), outImg, compression_params);
   cout << "outfile: " << outfile << endl;
 }
 
