@@ -88,16 +88,18 @@ std::vector<int> get_bounds(int **img, int rows, int cols)
 {
   std::vector<int> bounds;
   int y;
-
-  // int five = rows * 0.02;
-  // for(y = 0; y < rows; ++y) {
-  //   if ( y % five == 0 ) {
-  //     bounds.push_back(y);
-  //   }
-  // }
-
   int *prof = get_profile(img, rows, cols);
-  int maxy, upper, lower, num, max_bounds = 50;
+
+// Zero out the first and last 10% of the image since it isn't useful to us.
+// The amount that needs to be zeroes out will vary depending on the
+// data set you are working with.
+  int five = rows * 0.1;
+  for(y = 0; y < five; ++y) {
+    prof[y] = 0;
+    prof[rows-1-y] = 0;
+  }
+
+  int maxy, upper, lower, num, max_bounds = 100;
   for(num = 0; num < max_bounds; ++num)
   {
     maxy = 0;
@@ -106,9 +108,12 @@ std::vector<int> get_bounds(int **img, int rows, int cols)
         maxy = y;
       }
     }
+// This zeroes out the profile around the chosen maxy.
+// This makes sure that you don't pick to maxes that are too close to
+// each other. This will vary by data set
+// (I used the average distance between lines)
     upper = min(rows, maxy+10);
     lower = max(maxy-10, 0);
-    // printf("upper, lower: %d, %d\n", upper, lower);
     for(y = lower; y < upper; ++y) {
       prof[y] = 0;
     }
@@ -272,15 +277,15 @@ void write_lines(string imgfile, string outfile)
   cv::Mat img2;
   img2 = carve(image2, image2color);
 
-  // cv::Mat image3;
-  // cv::transpose(image2, image3);
-  // cv::Mat img3;
-  // cv::transpose(img2, img3);
-  // img3 = carve(image3, img3);
+  cv::Mat image3;
+  cv::transpose(image2, image3);
+  cv::Mat img3;
+  cv::transpose(img2, img3);
+  img3 = carve(image3, img3);
 
   cv::Mat outImg;
-  // cv::transpose(img3, outImg);
-  outImg = img2;
+  cv::transpose(img3, outImg);
+  // outImg = img2;
 
   vector<int> compression_params;
   compression_params.push_back(CV_IMWRITE_PNG_COMPRESSION);
