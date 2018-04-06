@@ -20,8 +20,8 @@ std::vector<int> get_bounds(int **img, int rows, int cols);
 cv::Mat drawPaths(cv::Mat image, int** paths, int path_count, int height, std::vector<int> bounds);
 void draw(cv::Mat image);
 
-int WEIGHT_MAX = 20;
-int FUNCTION = 0;
+int WEIGHT_MAX = 100;
+int FUNCTION = 2;
 float INCREMENT = 0.15;
 
 cv::Mat carve(cv::Mat image, cv::Mat imagecolor)
@@ -140,6 +140,20 @@ double interpolation(int x, int f)
   }
 }
 
+
+void trim_paths(int **paths, int path_count, int cols)
+{
+  int path, x;
+  for(path = 0; path < path_count; path++)
+  {
+    for(x = 0; x < cols; x++)
+    {
+      paths[path][x];
+    }
+  }
+}
+
+
 double** get_cost(int **img, std::vector<int> bounds, int rows, int cols)
 {
 
@@ -223,21 +237,16 @@ int** get_forptrs(double **img, int rows, int cols)
 
 cv::Mat drawPaths(cv::Mat image, int** paths, int path_count, int width, std::vector<int> bounds)
 {
-  int five = path_count * 0.02;
-  // printf("rows: %d, cols: %d\n", image.rows, image.cols);
   for(int path = 0; path < path_count; path++)
   {
-    // cout << "path: " << path << ":\n";
     image.at<cv::Vec3b>(path, 0) = cv::Vec3b(0, 0, 255);
     for(int x = 0; x < width; x++)
     {
-      // cout << "y: " << paths[path][x] << ", x: " << x << ", ";
       image.at<cv::Vec3b>(paths[path][x], x) = cv::Vec3b(0, 0, 255);
       if ( std::find(bounds.begin(), bounds.end(), path) != bounds.end() ) {
         image.at<cv::Vec3b>(path, x) = cv::Vec3b(255, 0, 0);
       }
     }
-    // cout << "\n";
   }
   return image;
 
@@ -297,15 +306,14 @@ void write_lines(string imgfile, string outfile)
 int main(int argc, char** argv )
 {
 
-  // printf("argc: %d\n", argc);
-  if (argc == 4) {
-    WEIGHT_MAX = atoi(argv[3]);
-  }else if (argc == 5) {
-    WEIGHT_MAX = atoi(argv[3]);
-    FUNCTION = atoi(argv[4]);
-  }else if (argc < 3 || argc > 5) {
-    printf("usage: EnergyFinder.out <Images_Folder> <Output_Folder> <Diagnol_Penalty>\n");
+  if (argc < 3 || argc > 5) {
+    printf("usage: EnergyFinder.out <Images_Folder> <Output_Folder> <Diagnol_Penalty> <Interpolation_Function\n");
     return -1;
+  }
+  if (argc > 3) {
+    WEIGHT_MAX = atoi(argv[3]);
+  }if (argc > 4) {
+    FUNCTION = atoi(argv[4]);
   }
 
   DIR *dir;
