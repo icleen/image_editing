@@ -10,17 +10,15 @@
 using namespace std;
 
 cv::Mat carve(cv::Mat image, cv::Mat imagecolor);
-double** get_cost_temp(int **img, int rows, int cols);
-double** get_cost(int **img, int rows, int cols);
-double** get_costfor(int **img, int rows, int cols);
-int** get_backptrs(double **img, int **paths, int rows, int cols, int &path_count);
+
+double** get_cost(int **img, std::vector<int> bounds, int rows, int cols);
 int** get_forptrs(double **img, int rows, int cols);
-int** get_forptrs2(int rows, int cols);
-cv::Mat drawPaths(cv::Mat image, int** paths, int path_count);
-cv::Mat drawPaths(cv::Mat image, int** paths, int path_count, int height);
-cv::Mat drawPaths(cv::Mat image, std::vector< std::vector<int> > paths);
+
+int* get_profile(int **img, int rows, int cols);
+std::vector<int> get_bounds(int **img, int rows, int cols);
+
+cv::Mat drawPaths(cv::Mat image, int** paths, int path_count, int height, std::vector<int> bounds);
 void draw(cv::Mat image);
-std::vector< std::vector<int> > findMostFreq(int** paths, int path_count, int cols);
 
 int WEIGHT_MAX = 20;
 int FUNCTION = 0;
@@ -42,25 +40,12 @@ cv::Mat carve(cv::Mat image, cv::Mat imagecolor)
   }
 
   double **cost;
-  // cost = get_cost_temp(img, rows, cols);
-  cost = get_cost(img, rows, cols);
+  std::vector<int> bounds = get_bounds(img, rows, cols);
+  cost = get_cost(img, bounds, rows, cols);
   int **forptrs = get_forptrs(cost, rows, cols);
-  // int **forptrs = get_forptrs2(rows, cols);
   int path_count = rows;
 
-  // for(y = 0; y < rows; y++) {
-  //   delete[] cost[y];
-  // }
-  // delete[] cost;
-  // cost = get_costfor(img, rows, cols);
-  // int **backptrs = get_backptrs(cost, forptrs, rows, cols, path_count);
-  // cv::Mat mt = drawPaths(imagecolor, backptrs, path_count, cols);
-  // for(y = 0; y < path_count; y++) {
-  //   delete[] backptrs[y];
-  // }
-  // delete[] backptrs;
-
-  cv::Mat mt = drawPaths(imagecolor, forptrs, path_count, cols);
+  cv::Mat mt = drawPaths(imagecolor, forptrs, path_count, cols, bounds);
 
   for(y = 0; y < rows; y++) {
     delete[] img[y];
@@ -81,17 +66,59 @@ cv::Mat carve(cv::Mat image, cv::Mat imagecolor)
 
 }
 
-int** get_forptrs2(int rows, int cols)
+
+int* get_profile(int **img, int rows, int cols)
 {
-  int x,y, **out = new int*[rows];
-  for(y = 0; y < rows; ++y) {
-    out[y] = new int[cols];
-    for(x = 0; x < cols; ++x) {
-      out[y][x] = y;
+  int *yprof = new int[rows];
+  int x, y, sumy;
+  for(y = 0; y < rows; ++y)
+  {
+    sumy = 0;
+    for(x = 0; x < cols; ++x)
+    {
+      sumy += img[y][x];
     }
+    yprof[y] = sumy;
   }
-  return out;
+  return yprof;
 }
+
+
+std::vector<int> get_bounds(int **img, int rows, int cols)
+{
+  std::vector<int> bounds;
+  int y;
+
+  // int five = rows * 0.02;
+  // for(y = 0; y < rows; ++y) {
+  //   if ( y % five == 0 ) {
+  //     bounds.push_back(y);
+  //   }
+  // }
+
+  int *prof = get_profile(img, rows, cols);
+  int maxy, upper, lower, num, max_bounds = 50;
+  for(num = 0; num < max_bounds; ++num)
+  {
+    maxy = 0;
+    for(y = 1; y < rows; ++y) {
+      if ( prof[y] > prof[maxy] ) {
+        maxy = y;
+      }
+    }
+    upper = min(rows, maxy+10);
+    lower = max(maxy-10, 0);
+    // printf("upper, lower: %d, %d\n", upper, lower);
+    for(y = lower; y < upper; ++y) {
+      prof[y] = 0;
+    }
+    bounds.push_back(maxy);
+  }
+  delete[] prof;
+
+  return bounds;
+}
+
 
 double interpolation(int x, int f)
 {
@@ -108,32 +135,16 @@ double interpolation(int x, int f)
   }
 }
 
-double** get_cost_temp(int **img, int rows, int cols)
-{
-  int y, x;
-  double **cost = new double*[rows];
-  for(y = 0; y < rows; y++)
-  {
-    cost[y] = new double[cols];
-    for(x = 0; x < cols; x++)
-    {
-      cost[y][x] = img[y][x] * 1.0;
-    }
-  }
-  return cost;
-}
-
-double** get_cost(int **img, int rows, int cols)
+double** get_cost(int **img, std::vector<int> bounds, int rows, int cols)
 {
 
   double lowest;
-  int five = rows * 0.02;
   int y, x = cols-1, f = FUNCTION;
   double **cost = new double*[rows];
   for(y = 0; y < rows; ++y) {
     cost[y] = new double[cols];
     cost[y][cols-1] = interpolation(img[y][x], f);
-    if (y % five == 0) {
+    if ( std::find(bounds.begin(), bounds.end(), y) != bounds.end() ) {
       cost[y][cols-1] += WEIGHT_MAX;
     }
   }
@@ -149,7 +160,7 @@ double** get_cost(int **img, int rows, int cols)
   {
     for(y = 1; y < rows-1; ++y)
     {
-      if (y % five == 0)
+      if( std::find(bounds.begin(), bounds.end(), y) != bounds.end() )
       {
         cost[y][x] = cost[y][x+1] + interpolation(255, f) + WEIGHT_MAX;
       }
@@ -160,59 +171,6 @@ double** get_cost(int **img, int rows, int cols)
           lowest = cost[y-1][x+1];
         }if(cost[y+1][x+1] + WEIGHT_MAX < lowest) {
           lowest = cost[y+1][x+1];
-        }
-        cost[y][x] = lowest + interpolation(img[y][x], f);
-      }
-    }
-  }
-
-  // x = cols/2;
-  // cout << "Cost Matrix:\n";
-  // for(y = 0; y < rows; ++y) {
-  //   cout << ", " << cost[y][x];
-  // }
-  // cout << endl;
-
-  return cost;
-
-}
-
-double** get_costfor(int **img, int rows, int cols)
-{
-
-  double lowest;
-  int five = rows * 0.05;
-  int y, x = 0, f = FUNCTION;
-  double **cost = new double*[rows];
-  for(y = 0; y < rows; ++y) {
-    cost[y] = new double[cols];
-    cost[y][0] = interpolation(img[y][x], f);
-    if (y % five == 0) {
-      cost[y][0] += WEIGHT_MAX;
-    }
-  }
-  y = rows-1;
-  for(x = 1; x < cols; ++x) {
-    cost[0][x] = interpolation(img[0][x], f) + cost[0][x-1] + WEIGHT_MAX;
-    cost[y][x] = interpolation(img[y][x], f) + cost[y][x-1] + WEIGHT_MAX;
-  }
-
-  for(x = 1; x < cols; ++x)
-  {
-    for(y = 1; y < rows-1; ++y)
-    {
-      // if (y % five == 0)
-      if (false)
-      {
-        cost[y][x] = cost[y][x-1] + interpolation(255, f) + WEIGHT_MAX;
-      }
-      else
-      {
-        lowest = cost[y][x-1];
-        if(cost[y-1][x-1] + WEIGHT_MAX < lowest) {
-          lowest = cost[y-1][x-1];
-        }if(cost[y+1][x-1] + WEIGHT_MAX < lowest) {
-          lowest = cost[y+1][x-1];
         }
         cost[y][x] = lowest + interpolation(img[y][x], f);
       }
@@ -257,103 +215,8 @@ int** get_forptrs(double **img, int rows, int cols)
   return forptrs;
 }
 
-int** get_backptrs(double **img, int **paths, int rows, int cols, int &path_count)
-{
-  int x = cols-1, y = 0, path = 0, lowest = 0;
-  std::map<int, int> uniqs;
-  for(path = 0; path < rows; path++) {
-    uniqs[paths[path][x]] = 0;
-  }
-  for(path = 0; path < rows; path++) {
-    uniqs[paths[path][x]] += 1;
-  }
 
-  // for(std::map<int,int>::iterator iter = uniqs.begin(); iter != uniqs.end(); ++iter) {
-  //   // printf("%d, ", iter->second);
-  //   if (iter->second < 2) {
-  //     uniqs.erase(iter);
-  //   }
-  // }
-  // cout << endl;
-
-  path_count = uniqs.size();
-  int **backptrs = new int*[path_count];
-  std::map<int,int>::iterator iter = uniqs.begin();
-  cout << "Number of unique paths: " << path_count << endl;
-  for(path = 0; path < path_count; ++path)
-  {
-    backptrs[path] = new int[cols];
-    backptrs[path][cols-1] = iter->first;
-    for(x = cols-2; x >= 0; --x)
-    {
-      y = backptrs[path][x+1];
-      lowest = img[y][x] - (WEIGHT_MAX);
-      backptrs[path][x] = y;
-      if ( y > 0 && img[y-1][x] < lowest ) {
-        lowest = img[y-1][x];
-        backptrs[path][x] = y-1;
-      }
-      if ( y < rows-1 && img[y+1][x] < lowest ) {
-        backptrs[path][x] = y+1;
-      }
-    }
-    ++iter;
-  }
-  // cout << endl;
-
-  return backptrs;
-}
-
-std::vector< std::vector<int> > findMostFreq(int** paths, int path_count, int cols)
-{
-
-  int **img = new int*[path_count+2];
-  int path, x, y;
-  for(y = 0; y < path_count+2; y++) {
-    img[y] = new int[cols] {};
-  }
-
-  for(path = 0; path < path_count; path++)
-  {
-    for(x = cols-1; x > 0; x--)
-    {
-      img[paths[path][x]][x-1] += 1;
-    }
-  }
-
-  std::vector< std::vector<int> > freq(cols-1);
-
-  for(x = 0; x < cols-1; x++)
-  {
-    for(y = 0; y < path_count+2; y++)
-    {
-      if(img[y][x] > 2) {
-        freq[x].push_back(y);
-      }
-    }
-  }
-  return freq;
-
-}
-
-cv::Mat drawPaths(cv::Mat image, std::vector< std::vector<int> > paths)
-{
-
-  int cols = paths[0].size();
-  for(int x = 0; x < paths.size(); x++)
-  {
-    for(int y = 0; y < paths[x].size(); y++)
-    {
-      image.at<cv::Vec3b>(paths[x][y], x) = cv::Vec3b(0, 0, 255);
-      // image.at<uchar>(paths[x][y], x) = uchar(255);
-    }
-  }
-  return image;
-
-}
-
-
-cv::Mat drawPaths(cv::Mat image, int** paths, int path_count, int width)
+cv::Mat drawPaths(cv::Mat image, int** paths, int path_count, int width, std::vector<int> bounds)
 {
   int five = path_count * 0.02;
   // printf("rows: %d, cols: %d\n", image.rows, image.cols);
@@ -365,29 +228,9 @@ cv::Mat drawPaths(cv::Mat image, int** paths, int path_count, int width)
     {
       // cout << "y: " << paths[path][x] << ", x: " << x << ", ";
       image.at<cv::Vec3b>(paths[path][x], x) = cv::Vec3b(0, 0, 255);
-      if (path % five == 0) {
+      if ( std::find(bounds.begin(), bounds.end(), path) != bounds.end() ) {
         image.at<cv::Vec3b>(path, x) = cv::Vec3b(255, 0, 0);
       }
-    }
-    // cout << "\n";
-  }
-  return image;
-
-}
-
-
-cv::Mat drawPaths(cv::Mat image, int** paths, int path_count)
-{
-
-  // printf("rows: %d, cols: %d\n", image.rows, image.cols);
-  for(int path = 0; path < path_count; path++)
-  {
-    // cout << "path: " << path << ":\n";
-    image.at<cv::Vec3b>(path, 0) = cv::Vec3b(0, 0, 255);
-    for(int x = 1; x < image.cols-1; x++)
-    {
-      // cout << "y: " << paths[path][x] << ", x: " << x << ", ";
-      image.at<cv::Vec3b>(paths[path][x-1], x) = cv::Vec3b(0, 0, 255);
     }
     // cout << "\n";
   }
