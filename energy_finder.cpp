@@ -11,13 +11,13 @@ using namespace std;
 
 cv::Mat carve(cv::Mat image, cv::Mat imagecolor);
 
-double** get_cost(int **img, std::vector<int> bounds, int rows, int cols);
-int** get_forptrs(double **img, int rows, int cols);
+double** get_cost(int **img, vector<int> bounds, int rows, int cols);
+vector< vector<int> > get_paths(double **img, vector<int> bounds, int rows, int cols);
 
 int* get_profile(int **img, int rows, int cols);
 std::vector<int> get_bounds(int **img, int rows, int cols);
 
-cv::Mat drawPaths(cv::Mat image, int** paths, int path_count, int height, std::vector<int> bounds);
+cv::Mat drawPaths(cv::Mat image, vector< vector<int> > paths, int width, std::vector<int> bounds);
 void draw(cv::Mat image);
 
 int WEIGHT_MAX = 100;
@@ -40,12 +40,11 @@ cv::Mat carve(cv::Mat image, cv::Mat imagecolor)
   }
 
   double **cost;
-  std::vector<int> bounds = get_bounds(img, rows, cols);
+  vector<int> bounds = get_bounds(img, rows, cols);
   cost = get_cost(img, bounds, rows, cols);
-  int **forptrs = get_forptrs(cost, rows, cols);
-  int path_count = rows;
+  vector< vector<int> > paths = get_paths(cost, bounds, rows, cols);
 
-  cv::Mat mt = drawPaths(imagecolor, forptrs, path_count, cols, bounds);
+  cv::Mat mt = drawPaths(imagecolor, paths, cols, bounds);
 
   for(y = 0; y < rows; y++) {
     delete[] img[y];
@@ -56,11 +55,6 @@ cv::Mat carve(cv::Mat image, cv::Mat imagecolor)
     delete[] cost[y];
   }
   delete[] cost;
-
-  for(y = 0; y < rows; y++) {
-    delete[] forptrs[y];
-  }
-  delete[] forptrs;
 
   return mt;
 
@@ -84,9 +78,9 @@ int* get_profile(int **img, int rows, int cols)
 }
 
 
-std::vector<int> get_bounds(int **img, int rows, int cols)
+vector<int> get_bounds(int **img, int rows, int cols)
 {
-  std::vector<int> bounds;
+  vector<int> bounds;
   int y;
   int *prof = get_profile(img, rows, cols);
 
@@ -141,20 +135,57 @@ double interpolation(int x, int f)
 }
 
 
-void trim_paths(int **paths, int path_count, int cols)
-{
-  int path, x;
-  for(path = 0; path < path_count; path++)
-  {
-    for(x = 0; x < cols; x++)
-    {
-      paths[path][x];
-    }
-  }
-}
+// vector< vector<int> > trim_paths(int** paths, int path_count, int cols)
+// {
+//
+//   // std::map<int, int> uniqs;
+//   // for(path = 0; path < rows; path++) {
+//   //   uniqs[paths[path][x]] = 0;
+//   // }
+//   // for(path = 0; path < rows; path++) {
+//   //   uniqs[paths[path][x]] += 1;
+//   // }
+//   //
+//   // for(std::map<int,int>::iterator iter = uniqs.begin(); iter != uniqs.end(); ++iter) {
+//   //   if (iter->second < 10) {
+//   //     uniqs.erase(iter);
+//   //   }
+//   // }
+//   // path_count = uniqs.size();
+//   // std::map<int,int>::iterator iter = uniqs.begin();
+//   // vector< map < int, int > > freqs;
+//
+//   int path, x, y;
+//   int path, x, y;
+//   vector< vector<int> > freqs(path_count);
+//   vector<int> freqp;
+//   map<int, int> mmap;
+//
+//   for(path = 0; path < path_count; ++path)
+//   {
+//     mmap.clear();
+//     freqp.clear();
+//     for(x = 0; x < cols; ++x) {
+//       mmap[paths[path][x]] += 1;
+//     }
+//     for(map<int,int>::iterator iter = mmap.begin(); iter != mmap.end(); ++iter) {
+//       freqp.push_back(iter->second);
+//     }
+//     freqs[path] = freqp;
+//   }
+//
+//   for(y = 0; y < path_count+2; ++y)
+//   {
+//     if(img[y][x] > 2) {
+//       freq[x].push_back(y);
+//     }
+//   }
+//   return freq;
+//
+// }
 
 
-double** get_cost(int **img, std::vector<int> bounds, int rows, int cols)
+double** get_cost(int **img, vector<int> bounds, int rows, int cols)
 {
 
   double lowest;
@@ -200,54 +231,63 @@ double** get_cost(int **img, std::vector<int> bounds, int rows, int cols)
 
 }
 
-int** get_forptrs(double **img, int rows, int cols)
+vector< vector<int> > get_paths(double **img, vector<int> bounds, int rows, int cols)
 {
   // printf("getting forptrs; rows: %d, cols: %d\n", rows, cols);
-  double lowest = 0;
-  int path = 0, path_count = rows, x = 0, y = 0;
-  // float weight = 0.0, start = cols * 0.05;
-  int **forptrs = new int*[path_count];
-  for(path = 0; path < path_count; path++) {
-    forptrs[path] = new int[cols];
-    forptrs[path][x] = path;
+  int path_count = bounds.size()-1;
+  vector<int> path(cols, 0);
+  vector< vector<int> > paths(path_count, path);
+  int i, x, y, bound, lower, upper, miny;
+  double lowest;
+
+  for(i = 0; i < path_count; ++i)
+  {
+    lower = bounds[i];
+    upper = bounds[i+1];
+    miny = lower;
+    for(y = lower+1; y < upper; ++y)
+    {
+      if ( img[y][0] < img[miny][0] ) {
+        miny = y;
+      }
+    }
+    paths[i][0] = miny;
   }
 
-  for(x = 1; x < cols; x++)
+  for(i = 0; i < path_count; i++)
   {
-    // if (x > start && weight < WEIGHT_MAX) // ignores the first 5% of the image
-    //   weight += INCREMENT;
-    for(path = 0; path < rows; path++)
+    for(x = 1; x < cols; x++)
     {
-      y = forptrs[path][x-1];
+      y = paths[i][x-1];
       // lowest = img[y][x] - weight;
       lowest = img[y][x];
-      forptrs[path][x] = y;
+      paths[i][x] = y;
       if ( y > 0 && img[y-1][x] < lowest ) {
         lowest = img[y-1][x];
-        forptrs[path][x] = y-1;
+        paths[i][x] = y-1;
       }
       if ( y < rows-1 && img[y+1][x] < lowest ) {
-        forptrs[path][x] = y+1;
+        paths[i][x] = y+1;
       }
     }
   }
-  return forptrs;
+
+  return paths;
 }
 
 
-cv::Mat drawPaths(cv::Mat image, int** paths, int path_count, int width, std::vector<int> bounds)
+cv::Mat drawPaths(cv::Mat image, vector< vector<int> > paths, int width, std::vector<int> bounds)
 {
-  for(int path = 0; path < path_count; path++)
+  for(int path = 0; path < paths.size(); path++)
   {
-    image.at<cv::Vec3b>(path, 0) = cv::Vec3b(0, 0, 255);
+    // image.at<cv::Vec3b>(path, 0) = cv::Vec3b(0, 0, 255);
     for(int x = 0; x < width; x++)
     {
       image.at<cv::Vec3b>(paths[path][x], x) = cv::Vec3b(0, 0, 255);
-      if ( std::find(bounds.begin(), bounds.end(), path) != bounds.end() ) {
-        image.at<cv::Vec3b>(path, x) = cv::Vec3b(255, 0, 0);
-      }
+      image.at<cv::Vec3b>(bounds[path], x) = cv::Vec3b(255, 0, 0);
     }
   }
+
   return image;
 
 }
