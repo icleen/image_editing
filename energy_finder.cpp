@@ -5,6 +5,7 @@
 #include <cmath>
 #include <map>
 #include <string.h>
+#include <assert.h>
 #include "dirent.h"
 
 using namespace std;
@@ -13,6 +14,7 @@ cv::Mat carve(cv::Mat image, cv::Mat imagecolor);
 
 double** get_cost(int **img, vector<int> bounds, int rows, int cols);
 vector< vector<int> > get_paths(double **img, vector<int> bounds, int rows, int cols);
+vector< vector<int> > trim_paths(vector< vector<int> > paths, vector<int> bounds, int cols);
 
 int* get_profile(int **img, int rows, int cols);
 std::vector<int> get_bounds(int **img, int rows, int cols);
@@ -43,6 +45,7 @@ cv::Mat carve(cv::Mat image, cv::Mat imagecolor)
   vector<int> bounds = get_bounds(img, rows, cols);
   cost = get_cost(img, bounds, rows, cols);
   vector< vector<int> > paths = get_paths(cost, bounds, rows, cols);
+  // trim_paths(paths, bounds, cols);
 
   cv::Mat mt = drawPaths(imagecolor, paths, cols, bounds);
 
@@ -58,6 +61,50 @@ cv::Mat carve(cv::Mat image, cv::Mat imagecolor)
 
   return mt;
 
+}
+
+
+vector< vector<int> > trim_paths(vector< vector<int> > paths, vector<int> bounds, int cols)
+{
+  int path_count = bounds.size()-1;
+  int path, x, y, upper, lower;
+  float mean, stdev;
+  vector<int> freqp;
+  vector< vector<int> > newpaths;
+
+  for(path = 0; path < path_count; ++path)
+  {
+    lower = bounds[path]+1;
+    upper = bounds[path+1];
+    freqp.resize(upper-lower, 0);
+    for (x = 0; x < cols; ++x) {
+      assert(paths[path][x] >= lower && paths[path][x] <= upper);
+      freqp[paths[path][x]-lower] += 1;
+    }
+
+    // mean = 0.0;
+    // stdev = 0.0;
+    // for(y = lower; y < upper; ++y)
+    // {
+    //   cout << freqp[y-lower] << ", ";
+    //   // mean += freqp[y-lower];
+    //   if (mean < freqp[y-lower]) {
+    //     mean = freqp[y-lower];
+    //   }
+    // }
+    // // mean /= (upper-lower);
+    // for(y = lower; y < upper; ++y) {
+    //   stdev += pow(freqp[y-lower] - mean, 2);
+    // }
+    // stdev = sqrt(stdev / (upper-lower));
+    // // cout << "stdev: " << stdev << endl;
+    // if (stdev > 100) {
+    //   // paths.erase(paths.begin()+path);
+    //   // newpaths.push_back(paths[path]);
+    // }
+  }
+
+  return newpaths;
 }
 
 
@@ -96,6 +143,7 @@ vector<int> get_bounds(int **img, int rows, int cols)
   int maxy, upper, lower, num, max_bounds = 100;
   for(num = 0; num < max_bounds; ++num)
   {
+// find the max value in the profile projection
     maxy = 0;
     for(y = 1; y < rows; ++y) {
       if ( prof[y] > prof[maxy] ) {
@@ -111,10 +159,14 @@ vector<int> get_bounds(int **img, int rows, int cols)
     for(y = lower; y < upper; ++y) {
       prof[y] = 0;
     }
-    bounds.push_back(maxy);
+// add the y value to the bounds list
+    if (maxy != 0) {
+      bounds.push_back(maxy);
+    }
   }
   delete[] prof;
 
+  sort(bounds.begin(), bounds.end());
   return bounds;
 }
 
@@ -135,56 +187,6 @@ double interpolation(int x, int f)
 }
 
 
-// vector< vector<int> > trim_paths(int** paths, int path_count, int cols)
-// {
-//
-//   // std::map<int, int> uniqs;
-//   // for(path = 0; path < rows; path++) {
-//   //   uniqs[paths[path][x]] = 0;
-//   // }
-//   // for(path = 0; path < rows; path++) {
-//   //   uniqs[paths[path][x]] += 1;
-//   // }
-//   //
-//   // for(std::map<int,int>::iterator iter = uniqs.begin(); iter != uniqs.end(); ++iter) {
-//   //   if (iter->second < 10) {
-//   //     uniqs.erase(iter);
-//   //   }
-//   // }
-//   // path_count = uniqs.size();
-//   // std::map<int,int>::iterator iter = uniqs.begin();
-//   // vector< map < int, int > > freqs;
-//
-//   int path, x, y;
-//   int path, x, y;
-//   vector< vector<int> > freqs(path_count);
-//   vector<int> freqp;
-//   map<int, int> mmap;
-//
-//   for(path = 0; path < path_count; ++path)
-//   {
-//     mmap.clear();
-//     freqp.clear();
-//     for(x = 0; x < cols; ++x) {
-//       mmap[paths[path][x]] += 1;
-//     }
-//     for(map<int,int>::iterator iter = mmap.begin(); iter != mmap.end(); ++iter) {
-//       freqp.push_back(iter->second);
-//     }
-//     freqs[path] = freqp;
-//   }
-//
-//   for(y = 0; y < path_count+2; ++y)
-//   {
-//     if(img[y][x] > 2) {
-//       freq[x].push_back(y);
-//     }
-//   }
-//   return freq;
-//
-// }
-
-
 double** get_cost(int **img, vector<int> bounds, int rows, int cols)
 {
 
@@ -198,13 +200,12 @@ double** get_cost(int **img, vector<int> bounds, int rows, int cols)
       cost[y][cols-1] += WEIGHT_MAX;
     }
   }
+// raise the cost of the first and last rows to maximum so the seam can't go there
   y = rows-1;
   for(x = cols-2; x >= 0; --x) {
     cost[0][x] = interpolation(img[0][x], f) + cost[0][x+1] + WEIGHT_MAX;
     cost[y][x] = interpolation(img[y][x], f) + cost[y][x+1] + WEIGHT_MAX;
   }
-
-  int section = 1;
 
   for(x = cols-2; x >= 0; --x)
   {
@@ -218,9 +219,9 @@ double** get_cost(int **img, vector<int> bounds, int rows, int cols)
       {
         lowest = cost[y][x+1];
         if(cost[y-1][x+1] + WEIGHT_MAX < lowest) {
-          lowest = cost[y-1][x+1];
+          lowest = cost[y-1][x+1] + WEIGHT_MAX;
         }if(cost[y+1][x+1] + WEIGHT_MAX < lowest) {
-          lowest = cost[y+1][x+1];
+          lowest = cost[y+1][x+1] + WEIGHT_MAX;
         }
         cost[y][x] = lowest + interpolation(img[y][x], f);
       }
@@ -238,11 +239,11 @@ vector< vector<int> > get_paths(double **img, vector<int> bounds, int rows, int 
   vector<int> path(cols, 0);
   vector< vector<int> > paths(path_count, path);
   int i, x, y, bound, lower, upper, miny;
-  double lowest;
+  double lowest, highest;
 
   for(i = 0; i < path_count; ++i)
   {
-    lower = bounds[i];
+    lower = bounds[i]+1;
     upper = bounds[i+1];
     miny = lower;
     for(y = lower+1; y < upper; ++y)
@@ -251,12 +252,14 @@ vector< vector<int> > get_paths(double **img, vector<int> bounds, int rows, int 
         miny = y;
       }
     }
+// cout << "lower: " << lower << ", upper: " << upper << ", miny: " << miny << endl;
+    assert(miny >= lower && miny <= upper);
     paths[i][0] = miny;
   }
 
-  for(i = 0; i < path_count; i++)
+  for(i = 0; i < path_count; ++i)
   {
-    for(x = 1; x < cols; x++)
+    for(x = 1; x < cols; ++x)
     {
       y = paths[i][x-1];
       // lowest = img[y][x] - weight;
@@ -269,8 +272,64 @@ vector< vector<int> > get_paths(double **img, vector<int> bounds, int rows, int 
       if ( y < rows-1 && img[y+1][x] < lowest ) {
         paths[i][x] = y+1;
       }
+      assert(paths[i][x] >= bounds[i] && paths[i][x] <= bounds[i+1]);
     }
   }
+
+// Remove the paths that don't have an stdev above 100
+  int sum, size;
+  float mean, stdev;
+  vector<int> freqp, torem;
+  for(i = 0; i < path_count; ++i)
+  {
+    lower = bounds[i];
+    upper = bounds[i+1];
+    size = upper-lower+1;
+    freqp.clear();
+    freqp.resize(size, 0);
+    sum = 0;
+    for (x = 0; x < cols; ++x) {
+      assert(paths[i][x] >= lower && paths[i][x] <= upper);
+      assert(paths[i][x]-lower >= 0 && paths[i][x]-lower < freqp.size());
+      freqp[paths[i][x]-lower] += 1;
+      sum += 1;
+    }
+    assert(sum == cols);
+    // mean = (float) sum / (upper-lower+1) * 1.0;
+    // mean = 0.0;
+    lowest = 1000;
+    highest = 0;
+    for(y = lower; y < upper+1; ++y)
+    {
+      if (highest < freqp[y-lower]) {
+        highest = freqp[y-lower];
+      }
+      if (lowest > freqp[y-lower]) {
+        lowest = freqp[y-lower];
+      }
+    }
+
+    // stdev = 0.0;
+    // for(y = lower; y < upper; ++y) {
+    //   stdev += pow(freqp[y-lower] - mean, 2);
+    // }
+    // stdev = sqrt(stdev / size);
+    // cout << "stdev: " << stdev << endl;
+
+    if (highest - lowest < 300) {
+      torem.push_back(i);
+      // paths.erase(paths.begin()+i);
+      // newpaths.push_back(paths[i]);
+    }
+  }
+
+  cout << "Before: " << paths.size() << endl;
+  for(i = torem.size()-1; i >= 0; --i)
+  {
+    paths.erase(paths.begin()+torem[i]);
+    // printf("%d, ", torem[i]);
+  }
+  cout << "\nAfter: " << paths.size() << endl;
 
   return paths;
 }
@@ -278,12 +337,18 @@ vector< vector<int> > get_paths(double **img, vector<int> bounds, int rows, int 
 
 cv::Mat drawPaths(cv::Mat image, vector< vector<int> > paths, int width, std::vector<int> bounds)
 {
-  for(int path = 0; path < paths.size(); path++)
+  int path, x;
+  for(path = 0; path < paths.size(); path++)
   {
-    // image.at<cv::Vec3b>(path, 0) = cv::Vec3b(0, 0, 255);
-    for(int x = 0; x < width; x++)
+    for(x = 0; x < width; x++)
     {
       image.at<cv::Vec3b>(paths[path][x], x) = cv::Vec3b(0, 0, 255);
+    }
+  }
+  for(path = 0; path < bounds.size(); path++)
+  {
+    for(x = 0; x < width; x++)
+    {
       image.at<cv::Vec3b>(bounds[path], x) = cv::Vec3b(255, 0, 0);
     }
   }
