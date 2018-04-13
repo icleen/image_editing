@@ -16,10 +16,17 @@ double** get_cost(int **img, vector<int> bounds, int rows, int cols);
 vector< vector<int> > get_paths(double **img, vector<int> bounds, int rows, int cols);
 vector< vector<int> > trim_paths(vector< vector<int> > paths, vector<int> bounds, int cols);
 
+double** get_cost_ver(int **img, vector<int> bounds, int rows, int cols);
+vector< vector<int> > get_paths_ver(double **img, vector<int> bounds, int rows, int cols);
+
 int* get_profile(int **img, int rows, int cols);
 std::vector<int> get_bounds(int **img, int rows, int cols, float percent);
 
+int* get_profile_ver(int **img, int rows, int cols);
+std::vector<int> get_bounds_ver(int **img, int rows, int cols, float percent);
+
 cv::Mat drawPaths(cv::Mat image, vector< vector<int> > paths, int width, std::vector<int> bounds);
+cv::Mat drawPaths_ver(cv::Mat image, vector< vector<int> > paths, int height, std::vector<int> bounds);
 void draw(cv::Mat image);
 
 int WEIGHT_MAX = 100;
@@ -45,22 +52,57 @@ cv::Mat carve(cv::Mat image, cv::Mat imagecolor, float percent)
   vector<int> bounds = get_bounds(img, rows, cols, percent);
   cost = get_cost(img, bounds, rows, cols);
   vector< vector<int> > paths = get_paths(cost, bounds, rows, cols);
-  // trim_paths(paths, bounds, cols);
-
-  cv::Mat mt = drawPaths(imagecolor, paths, cols, bounds);
-
-  for(y = 0; y < rows; y++) {
-    delete[] img[y];
-  }
-  delete[] img;
 
   for(y = 0; y < rows; y++) {
     delete[] cost[y];
   }
   delete[] cost;
 
+  bounds = get_bounds_ver(img, rows, cols, percent/2.0);
+  cost = get_cost_ver(img, bounds, rows, cols);
+  vector< vector<int> > paths2 = get_paths_ver(cost, bounds, rows, cols);
+
+  points = match_points(paths, paths2);
+
+  cv::Mat mt = drawPaths(imagecolor, paths, cols, bounds);
+  mt = drawPaths_ver(mt, paths2, rows, bounds);
+
+  for(y = 0; y < rows; y++) {
+    delete[] img[y];
+  }
+  delete[] img;
+
   return mt;
 
+}
+
+
+vector< vector<int> > match_points(vector< vector<int> > paths, vector< vector<int> > paths2)
+{
+  int y, x;
+  for(y = 0; y < paths.size(); y++)
+  {
+    for(x = 0; x < paths2.size(); x++)
+    {
+      paths2[x];
+    }
+  }
+}
+
+
+double interpolation(int x, int f)
+{
+  if(f == 0) {
+    return x * 1.0;
+  }else if (f == 1) {
+    return (x * 1.0) / (1 + abs(x * 1.0));
+  }else if (f == 2) {
+    return x * x * 1.0;
+  }else if (f == 3) {
+    return exp(x);
+  }else if (f == 4) {
+    return 1 / (1 + exp(x * -1.0));
+  }
 }
 
 
@@ -171,22 +213,6 @@ vector<int> get_bounds(int **img, int rows, int cols, float percent)
 }
 
 
-double interpolation(int x, int f)
-{
-  if(f == 0) {
-    return x * 1.0;
-  }else if (f == 1) {
-    return (x * 1.0) / (1 + abs(x * 1.0));
-  }else if (f == 2) {
-    return x * x * 1.0;
-  }else if (f == 3) {
-    return exp(x);
-  }else if (f == 4) {
-    return 1 / (1 + exp(x * -1.0));
-  }
-}
-
-
 double** get_cost(int **img, vector<int> bounds, int rows, int cols)
 {
 
@@ -195,9 +221,9 @@ double** get_cost(int **img, vector<int> bounds, int rows, int cols)
   double **cost = new double*[rows];
   for(y = 0; y < rows; ++y) {
     cost[y] = new double[cols];
-    cost[y][cols-1] = interpolation(img[y][x], f);
+    cost[y][x] = interpolation(img[y][x], f);
     if ( std::find(bounds.begin(), bounds.end(), y) != bounds.end() ) {
-      cost[y][cols-1] += WEIGHT_MAX;
+      cost[y][x] += WEIGHT_MAX;
     }
   }
 // raise the cost of the first and last rows to maximum so the seam can't go there
@@ -316,6 +342,192 @@ vector< vector<int> > get_paths(double **img, vector<int> bounds, int rows, int 
 }
 
 
+int* get_profile_ver(int **img, int rows, int cols)
+{
+  int *xprof = new int[cols];
+  int x, y, sumx;
+  for(x = 0; x < cols; ++x)
+  {
+    sumx = 0;
+    for(y = 0; y < rows; ++y)
+    {
+      sumx += img[y][x];
+    }
+    xprof[x] = sumx;
+  }
+  return xprof;
+}
+
+
+vector<int> get_bounds_ver(int **img, int rows, int cols, float percent)
+{
+  vector<int> bounds;
+  int x;
+  printf("getting profile\n");
+  int *prof = get_profile_ver(img, rows, cols);
+  printf("got profile\n");
+  int five = cols * percent;
+  for(x = 0; x < five; ++x) {
+    prof[x] = 0;
+    prof[rows-1-x] = 0;
+  }
+
+  int maxx, upper, lower, num, max_bounds = 100;
+  for(num = 0; num < max_bounds; ++num)
+  {
+    maxx = 0;
+    for(x = 1; x < cols; ++x) {
+      if ( prof[x] > prof[maxx] ) {
+        maxx = x;
+      }
+    }
+    upper = min(cols, maxx+10);
+    lower = max(maxx-10, 0);
+    for(x = lower; x < upper; ++x) {
+      prof[x] = 0;
+    }
+    if (maxx != 0) {
+      bounds.push_back(maxx);
+    }
+  }
+  delete[] prof;
+
+  sort(bounds.begin(), bounds.end());
+  return bounds;
+}
+
+
+double** get_cost_ver(int **img, vector<int> bounds, int rows, int cols)
+{
+
+  double lowest;
+  int y, x = cols-1, f = FUNCTION;
+  double **cost = new double*[rows];
+  for(y = 0; y < rows; ++y) {
+    cost[y] = new double[cols];
+  }
+  y = rows-1;
+  for(x = 0; x < cols; ++x) {
+    cost[y][x] = interpolation(img[y][x], f);
+    if ( std::find(bounds.begin(), bounds.end(), x) != bounds.end() ) {
+      cost[y][x] += WEIGHT_MAX;
+    }
+  }
+// raise the cost of the first and last cols to maximum so the seam can't go there
+  x = cols-1;
+  for(y = rows-2; y >= 0; --y) {
+    cost[y][0] = interpolation(img[0][x], f) + cost[y+1][0] + WEIGHT_MAX;
+    cost[y][x] = interpolation(img[y][x], f) + cost[y+1][x] + WEIGHT_MAX;
+  }
+
+  for(y = rows-2; y >= 0; --y)
+  {
+    for(x = 1; x < cols-1; ++x)
+    {
+      if( std::find(bounds.begin(), bounds.end(), x) != bounds.end() )
+      {
+        cost[y][x] = cost[y+1][x] + interpolation(255, f) + WEIGHT_MAX;
+      }
+      else
+      {
+        lowest = cost[y+1][x];
+        if(cost[y+1][x-1] + WEIGHT_MAX < lowest) {
+          lowest = cost[y+1][x-1] + WEIGHT_MAX;
+        }if(cost[y+1][x+1] + WEIGHT_MAX < lowest) {
+          lowest = cost[y+1][x+1] + WEIGHT_MAX;
+        }
+        cost[y][x] = lowest + interpolation(img[y][x], f);
+      }
+    }
+  }
+
+  return cost;
+
+}
+
+vector< vector<int> > get_paths_ver(double **img, vector<int> bounds, int rows, int cols)
+{
+  // printf("getting forptrs; rows: %d, cols: %d\n", rows, cols);
+  int path_count = bounds.size()-1;
+  vector<int> path(rows, 0);
+  vector< vector<int> > paths(path_count, path);
+  int i, x, y, bound, lower, upper, minx;
+  double lowest, highest;
+
+  for(i = 0; i < path_count; ++i)
+  {
+    lower = bounds[i]+1;
+    upper = bounds[i+1];
+    minx = lower;
+    for(x = lower+1; x < upper; ++x)
+    {
+      if ( img[0][x] < img[0][minx] ) {
+        minx = x;
+      }
+    }
+// cout << "lower: " << lower << ", upper: " << upper << ", minx: " << minx << endl;
+    assert(minx >= lower && minx <= upper);
+    paths[i][0] = minx;
+  }
+
+  for(i = 0; i < path_count; ++i)
+  {
+    for(y = 1; y < rows; ++y)
+    {
+      x = paths[i][y-1];
+      lowest = img[y][x];
+      paths[i][y] = x;
+      if ( x > 0 && img[y][x-1] < lowest ) {
+        lowest = img[y][x-1];
+        paths[i][y] = x-1;
+      }
+      if ( x < cols-1 && img[y][x+1] < lowest ) {
+        paths[i][y] = x+1;
+      }
+      assert(paths[i][y] >= bounds[i] && paths[i][y] <= bounds[i+1]);
+    }
+  }
+
+  // find the paths that move around the most
+  int sum, low = 0.25 * rows, high = 0.75 * rows;
+  vector<int> torem;
+  float limit = 0.3 * (high - low);
+  // printf("limit: %f\n", limit);
+  for(i = 0; i < path_count; ++i)
+  {
+    sum = 0;
+    for (y = low; y < high; ++y) {
+      if(paths[i][y] != paths[i][y+1])
+        sum += 1;
+    }
+    // printf("path %d sum: %d\n", i, sum);
+    if (sum > limit) {
+      torem.push_back(i);
+    }
+    // if (sum > high) {
+    //   high = sum;
+    // }
+  }
+
+  // printf("half high: %f\n", float(high/2.0));
+  // for(i = 0; i < path_count; ++i)
+  // {
+  //   if (sum > limit) {
+  //     torem.push_back(i);
+  //   }
+  // }
+
+  cout << "Before: " << paths.size() << endl;
+  for(i = torem.size()-1; i >= 0; --i)
+  {
+    paths.erase(paths.begin()+torem[i]);
+  }
+  cout << "After: " << paths.size() << endl;
+
+  return paths;
+}
+
+
 cv::Mat drawPaths(cv::Mat image, vector< vector<int> > paths, int width, std::vector<int> bounds)
 {
   int path, x;
@@ -324,6 +536,28 @@ cv::Mat drawPaths(cv::Mat image, vector< vector<int> > paths, int width, std::ve
     for(x = 0; x < width; x++)
     {
       image.at<cv::Vec3b>(paths[path][x], x) = cv::Vec3b(0, 0, 255);
+    }
+  }
+  // for(path = 0; path < bounds.size(); path++)
+  // {
+  //   for(x = 0; x < width; x++)
+  //   {
+  //     image.at<cv::Vec3b>(bounds[path], x) = cv::Vec3b(255, 0, 0);
+  //   }
+  // }
+
+  return image;
+
+}
+
+cv::Mat drawPaths_ver(cv::Mat image, vector< vector<int> > paths, int height, std::vector<int> bounds)
+{
+  int path, y;
+  for(path = 0; path < paths.size(); path++)
+  {
+    for(y = 0; y < height; y++)
+    {
+      image.at<cv::Vec3b>(y, paths[path][y]) = cv::Vec3b(0, 0, 255);
     }
   }
   // for(path = 0; path < bounds.size(); path++)
@@ -374,21 +608,21 @@ void write_lines(string imgfile, string outfile)
   cv::Mat img2;
   img2 = carve(image2, image2color, xpercent);
 
-  cv::Mat image3;
-  cv::transpose(image2, image3);
-  cv::Mat img3;
-  cv::transpose(img2, img3);
-  img3 = carve(image3, img3, ypercent);
-
-  cv::Mat outImg;
-  cv::transpose(img3, outImg);
-  // outImg = img2;
+  // cv::Mat image3;
+  // cv::transpose(image2, image3);
+  // cv::Mat img3;
+  // cv::transpose(img2, img3);
+  // img3 = carve(image3, img3, ypercent);
+  //
+  // cv::Mat outImg;
+  // cv::transpose(img3, outImg);
 
   // vector<int> compression_params;
   // compression_params.push_back(CV_IMWRITE_PNG_COMPRESSION);
   // compression_params.push_back(9);
   // cout << cv::imwrite(outfile.c_str(), outImg, compression_params);
-  cout << cv::imwrite(outfile.c_str(), outImg);
+  // cout << cv::imwrite(outfile.c_str(), outImg);
+  cout << cv::imwrite(outfile.c_str(), img2);
   cout << "outfile: " << outfile << endl;
 }
 
