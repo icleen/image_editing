@@ -323,13 +323,13 @@ vector< vector<int> > get_paths(double **img, vector<int> bounds, int rows, int 
     }
   }
 
-  cout << "Before: " << paths.size() << endl;
+  // cout << "Before: " << paths.size() << endl;
   for(i = torem.size()-1; i >= 0; --i)
   {
     paths.erase(paths.begin()+torem[i]);
     // printf("%d, ", torem[i]);
   }
-  cout << "\nAfter: " << paths.size() << endl;
+  // cout << "\nAfter: " << paths.size() << endl;
 
   return paths;
 }
@@ -345,13 +345,13 @@ cv::Mat drawPaths(cv::Mat image, vector< vector<int> > paths, int width, std::ve
       image.at<cv::Vec3b>(paths[path][x], x) = cv::Vec3b(0, 0, 255);
     }
   }
-  for(path = 0; path < bounds.size(); path++)
-  {
-    for(x = 0; x < width; x++)
-    {
-      image.at<cv::Vec3b>(bounds[path], x) = cv::Vec3b(255, 0, 0);
-    }
-  }
+  // for(path = 0; path < bounds.size(); path++)
+  // {
+  //   for(x = 0; x < width; x++)
+  //   {
+  //     image.at<cv::Vec3b>(bounds[path], x) = cv::Vec3b(255, 0, 0);
+  //   }
+  // }
 
   return image;
 
@@ -374,10 +374,10 @@ void write_lines(string imgfile, string outfile)
     image = cv::imread( imgfile.c_str(), 0 );
     imagecolor = cv::imread( imgfile.c_str(), 1 );
   }catch(...) {
-    // printf("No image data: %s \n", imgfile.c_str());
+    printf("No image data: %s \n", imgfile.c_str());
     return;
   }if( !image.data ) {
-      // printf("No image data: %s \n", imgfile.c_str());
+      printf("No image data: %s \n", imgfile.c_str());
       return;
   }
 
@@ -401,10 +401,11 @@ void write_lines(string imgfile, string outfile)
   cv::transpose(img3, outImg);
   // outImg = img2;
 
-  vector<int> compression_params;
-  compression_params.push_back(CV_IMWRITE_PNG_COMPRESSION);
-  compression_params.push_back(9);
-  cout << cv::imwrite(outfile.c_str(), outImg, compression_params);
+  // vector<int> compression_params;
+  // compression_params.push_back(CV_IMWRITE_PNG_COMPRESSION);
+  // compression_params.push_back(9);
+  // cout << cv::imwrite(outfile.c_str(), outImg, compression_params);
+  cout << cv::imwrite(outfile.c_str(), outImg);
   cout << "outfile: " << outfile << endl;
 }
 
