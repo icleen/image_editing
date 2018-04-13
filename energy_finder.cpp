@@ -13,25 +13,21 @@ using namespace std;
 cv::Mat carve(cv::Mat image, cv::Mat imagecolor, float percent);
 
 double** get_cost(int **img, vector<int> bounds, int rows, int cols);
-vector< vector<int> > get_paths(double **img, vector<int> bounds, int rows, int cols);
-
 double** get_cost_ver(int **img, vector<int> bounds, int rows, int cols);
+
+vector< vector<int> > get_paths(double **img, vector<int> bounds, int rows, int cols);
 vector< vector<int> > get_paths_ver(double **img, vector<int> bounds, int rows, int cols);
 
 int* get_profile(int **img, int rows, int cols);
-std::vector<int> get_bounds(int **img, int rows, int cols, float percent);
-
 int* get_profile_ver(int **img, int rows, int cols);
+
+std::vector<int> get_bounds(int **img, int rows, int cols, float percent);
 std::vector<int> get_bounds_ver(int **img, int rows, int cols, float percent);
 
 vector< vector< cv::Point > > match_points(vector< vector<int> > paths, vector< vector<int> > paths2);
 cv::Mat drawPoints(cv::Mat image, vector< vector< cv::Point > > points);
 
-cv::Mat drawPaths(cv::Mat image, vector< vector<int> > paths, int width, std::vector<int> bounds);
-cv::Mat drawPaths_ver(cv::Mat image, vector< vector<int> > paths, int height, std::vector<int> bounds);
-void draw(cv::Mat image);
-
-int WEIGHT_MAX = 100;
+int WEIGHT_MAX = 200;
 int FUNCTION = 2;
 float INCREMENT = 0.15;
 
@@ -64,13 +60,9 @@ cv::Mat carve(cv::Mat image, cv::Mat imagecolor, float percent)
   cost = get_cost_ver(img, bounds, rows, cols);
   vector< vector<int> > paths2 = get_paths_ver(cost, bounds, rows, cols);
 
-  printf("Get Points\n");
   vector< vector< cv::Point > > points = match_points(paths, paths2);
-  printf("Got Points\n");
 
   cv::Mat mt = drawPoints(imagecolor, points);
-  // cv::Mat mt = drawPaths(imagecolor, paths, cols, bounds);
-  // mt = drawPaths_ver(mt, paths2, rows, bounds);
 
   for(y = 0; y < rows; y++) {
     delete[] cost[y];
@@ -236,7 +228,6 @@ double** get_cost(int **img, vector<int> bounds, int rows, int cols)
 
 vector< vector<int> > get_paths(double **img, vector<int> bounds, int rows, int cols)
 {
-  // printf("getting forptrs; rows: %d, cols: %d\n", rows, cols);
   int path_count = bounds.size()-1;
   vector<int> path(cols, 0);
   vector< vector<int> > paths(path_count, path);
@@ -254,7 +245,6 @@ vector< vector<int> > get_paths(double **img, vector<int> bounds, int rows, int 
         miny = y;
       }
     }
-// cout << "lower: " << lower << ", upper: " << upper << ", miny: " << miny << endl;
     assert(miny >= lower && miny <= upper);
     paths[i][0] = miny;
   }
@@ -264,7 +254,6 @@ vector< vector<int> > get_paths(double **img, vector<int> bounds, int rows, int 
     for(x = 1; x < cols; ++x)
     {
       y = paths[i][x-1];
-      // lowest = img[y][x] - weight;
       lowest = img[y][x];
       paths[i][x] = y;
       if ( y > 0 && img[y-1][x] < lowest ) {
@@ -282,7 +271,6 @@ vector< vector<int> > get_paths(double **img, vector<int> bounds, int rows, int 
   int sum, low = 0.25 * cols, high = 0.75 * cols;
   vector<int> torem;
   float limit = 0.3 * (high - low);
-  // printf("limit: %f\n", limit);
   for(i = 0; i < path_count; ++i)
   {
     sum = 0;
@@ -290,29 +278,15 @@ vector< vector<int> > get_paths(double **img, vector<int> bounds, int rows, int 
       if(paths[i][x] != paths[i][x+1])
         sum += 1;
     }
-    // printf("path %d sum: %d\n", i, sum);
     if (sum > limit) {
       torem.push_back(i);
     }
-    // if (sum > high) {
-    //   high = sum;
-    // }
   }
 
-  // printf("half high: %f\n", float(high/2.0));
-  // for(i = 0; i < path_count; ++i)
-  // {
-  //   if (sum > limit) {
-  //     torem.push_back(i);
-  //   }
-  // }
-
-  cout << "Before: " << paths.size() << endl;
   for(i = torem.size()-1; i >= 0; --i)
   {
     paths.erase(paths.begin()+torem[i]);
   }
-  cout << "After: " << paths.size() << endl;
 
   return paths;
 }
@@ -439,7 +413,6 @@ vector< vector<int> > get_paths_ver(double **img, vector<int> bounds, int rows, 
         minx = x;
       }
     }
-// cout << "lower: " << lower << ", upper: " << upper << ", minx: " << minx << endl;
     assert(minx >= lower && minx <= upper);
     paths[i][0] = minx;
   }
@@ -466,7 +439,6 @@ vector< vector<int> > get_paths_ver(double **img, vector<int> bounds, int rows, 
   int sum, low = 0.25 * rows, high = 0.75 * rows;
   vector<int> torem;
   float limit = 0.3 * (high - low);
-  // printf("limit: %f\n", limit);
   for(i = 0; i < path_count; ++i)
   {
     sum = 0;
@@ -474,29 +446,15 @@ vector< vector<int> > get_paths_ver(double **img, vector<int> bounds, int rows, 
       if(paths[i][y] != paths[i][y+1])
         sum += 1;
     }
-    // printf("path %d sum: %d\n", i, sum);
     if (sum > limit) {
       torem.push_back(i);
     }
-    // if (sum > high) {
-    //   high = sum;
-    // }
   }
 
-  // printf("half high: %f\n", float(high/2.0));
-  // for(i = 0; i < path_count; ++i)
-  // {
-  //   if (sum > limit) {
-  //     torem.push_back(i);
-  //   }
-  // }
-
-  cout << "Before: " << paths.size() << endl;
   for(i = torem.size()-1; i >= 0; --i)
   {
     paths.erase(paths.begin()+torem[i]);
   }
-  cout << "After: " << paths.size() << endl;
 
   return paths;
 }
@@ -516,60 +474,6 @@ cv::Mat drawPoints(cv::Mat image, vector< vector< cv::Point > > points)
 }
 
 
-cv::Mat drawPaths(cv::Mat image, vector< vector<int> > paths, int width, std::vector<int> bounds)
-{
-  int path, x;
-  for(path = 0; path < paths.size(); path++)
-  {
-    for(x = 0; x < width; x++)
-    {
-      image.at<cv::Vec3b>(paths[path][x], x) = cv::Vec3b(0, 0, 255);
-    }
-  }
-
-  // for(path = 0; path < bounds.size(); path++)
-  // {
-  //   for(x = 0; x < width; x++)
-  //   {
-  //     image.at<cv::Vec3b>(bounds[path], x) = cv::Vec3b(255, 0, 0);
-  //   }
-  // }
-
-  return image;
-
-}
-
-cv::Mat drawPaths_ver(cv::Mat image, vector< vector<int> > paths, int height, std::vector<int> bounds)
-{
-  int path, y;
-  for(path = 0; path < paths.size(); path++)
-  {
-    for(y = 0; y < height; y++)
-    {
-      image.at<cv::Vec3b>(y, paths[path][y]) = cv::Vec3b(0, 0, 255);
-    }
-  }
-  // for(path = 0; path < bounds.size(); path++)
-  // {
-  //   for(x = 0; x < width; x++)
-  //   {
-  //     image.at<cv::Vec3b>(bounds[path], x) = cv::Vec3b(255, 0, 0);
-  //   }
-  // }
-
-  return image;
-
-}
-
-void draw(cv::Mat image)
-{
-
-  cv::namedWindow("Display Image", cv::WINDOW_AUTOSIZE );
-  cv::imshow("Display Image", image);
-  cv::waitKey(0);
-
-}
-
 void write_lines(string imgfile, string outfile)
 {
   cv::Mat image;
@@ -578,10 +482,10 @@ void write_lines(string imgfile, string outfile)
     image = cv::imread( imgfile.c_str(), 0 );
     imagecolor = cv::imread( imgfile.c_str(), 1 );
   }catch(...) {
-    printf("No image data: %s \n", imgfile.c_str());
+    // printf("No image data: %s \n", imgfile.c_str());
     return;
   }if( !image.data ) {
-      printf("No image data: %s \n", imgfile.c_str());
+      // printf("No image data: %s \n", imgfile.c_str());
       return;
   }
 
@@ -597,20 +501,6 @@ void write_lines(string imgfile, string outfile)
   cv::Mat img2;
   img2 = carve(image2, image2color, xpercent);
 
-  // cv::Mat image3;
-  // cv::transpose(image2, image3);
-  // cv::Mat img3;
-  // cv::transpose(img2, img3);
-  // img3 = carve(image3, img3, ypercent);
-  //
-  // cv::Mat outImg;
-  // cv::transpose(img3, outImg);
-
-  // vector<int> compression_params;
-  // compression_params.push_back(CV_IMWRITE_PNG_COMPRESSION);
-  // compression_params.push_back(9);
-  // cout << cv::imwrite(outfile.c_str(), outImg, compression_params);
-  // cout << cv::imwrite(outfile.c_str(), outImg);
   cout << cv::imwrite(outfile.c_str(), img2);
   cout << "outfile: " << outfile << endl;
 }
