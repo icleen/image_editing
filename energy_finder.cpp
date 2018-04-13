@@ -10,14 +10,14 @@
 
 using namespace std;
 
-cv::Mat carve(cv::Mat image, cv::Mat imagecolor);
+cv::Mat carve(cv::Mat image, cv::Mat imagecolor, float percent);
 
 double** get_cost(int **img, vector<int> bounds, int rows, int cols);
 vector< vector<int> > get_paths(double **img, vector<int> bounds, int rows, int cols);
 vector< vector<int> > trim_paths(vector< vector<int> > paths, vector<int> bounds, int cols);
 
 int* get_profile(int **img, int rows, int cols);
-std::vector<int> get_bounds(int **img, int rows, int cols);
+std::vector<int> get_bounds(int **img, int rows, int cols, float percent);
 
 cv::Mat drawPaths(cv::Mat image, vector< vector<int> > paths, int width, std::vector<int> bounds);
 void draw(cv::Mat image);
@@ -26,7 +26,7 @@ int WEIGHT_MAX = 100;
 int FUNCTION = 2;
 float INCREMENT = 0.15;
 
-cv::Mat carve(cv::Mat image, cv::Mat imagecolor)
+cv::Mat carve(cv::Mat image, cv::Mat imagecolor, float percent)
 {
 
   int rows = image.rows, cols = image.cols, x, y;
@@ -42,7 +42,7 @@ cv::Mat carve(cv::Mat image, cv::Mat imagecolor)
   }
 
   double **cost;
-  vector<int> bounds = get_bounds(img, rows, cols);
+  vector<int> bounds = get_bounds(img, rows, cols, percent);
   cost = get_cost(img, bounds, rows, cols);
   vector< vector<int> > paths = get_paths(cost, bounds, rows, cols);
   // trim_paths(paths, bounds, cols);
@@ -125,7 +125,7 @@ int* get_profile(int **img, int rows, int cols)
 }
 
 
-vector<int> get_bounds(int **img, int rows, int cols)
+vector<int> get_bounds(int **img, int rows, int cols, float percent)
 {
   vector<int> bounds;
   int y;
@@ -134,7 +134,7 @@ vector<int> get_bounds(int **img, int rows, int cols)
 // Zero out the first and last 10% of the image since it isn't useful to us.
 // The amount that needs to be zeroes out will vary depending on the
 // data set you are working with.
-  int five = rows * 0.1;
+  int five = rows * percent;
   for(y = 0; y < five; ++y) {
     prof[y] = 0;
     prof[rows-1-y] = 0;
@@ -276,60 +276,41 @@ vector< vector<int> > get_paths(double **img, vector<int> bounds, int rows, int 
     }
   }
 
-// Remove the paths that don't have an stdev above 100
-  int sum, size;
-  float mean, stdev;
-  vector<int> freqp, torem;
+  // find the paths that move around the most
+  int sum, low = 0.25 * cols, high = 0.75 * cols;
+  vector<int> torem;
+  float limit = 0.3 * (high - low);
+  // printf("limit: %f\n", limit);
   for(i = 0; i < path_count; ++i)
   {
-    lower = bounds[i];
-    upper = bounds[i+1];
-    size = upper-lower+1;
-    freqp.clear();
-    freqp.resize(size, 0);
     sum = 0;
-    for (x = 0; x < cols; ++x) {
-      assert(paths[i][x] >= lower && paths[i][x] <= upper);
-      assert(paths[i][x]-lower >= 0 && paths[i][x]-lower < freqp.size());
-      freqp[paths[i][x]-lower] += 1;
-      sum += 1;
+    for (x = low; x < high; ++x) {
+      if(paths[i][x] != paths[i][x+1])
+        sum += 1;
     }
-    assert(sum == cols);
-    // mean = (float) sum / (upper-lower+1) * 1.0;
-    // mean = 0.0;
-    lowest = 1000;
-    highest = 0;
-    for(y = lower; y < upper+1; ++y)
-    {
-      if (highest < freqp[y-lower]) {
-        highest = freqp[y-lower];
-      }
-      if (lowest > freqp[y-lower]) {
-        lowest = freqp[y-lower];
-      }
-    }
-
-    // stdev = 0.0;
-    // for(y = lower; y < upper; ++y) {
-    //   stdev += pow(freqp[y-lower] - mean, 2);
-    // }
-    // stdev = sqrt(stdev / size);
-    // cout << "stdev: " << stdev << endl;
-
-    if (highest - lowest < 300) {
+    // printf("path %d sum: %d\n", i, sum);
+    if (sum > limit) {
       torem.push_back(i);
-      // paths.erase(paths.begin()+i);
-      // newpaths.push_back(paths[i]);
     }
+    // if (sum > high) {
+    //   high = sum;
+    // }
   }
 
-  // cout << "Before: " << paths.size() << endl;
+  // printf("half high: %f\n", float(high/2.0));
+  // for(i = 0; i < path_count; ++i)
+  // {
+  //   if (sum > limit) {
+  //     torem.push_back(i);
+  //   }
+  // }
+
+  cout << "Before: " << paths.size() << endl;
   for(i = torem.size()-1; i >= 0; --i)
   {
     paths.erase(paths.begin()+torem[i]);
-    // printf("%d, ", torem[i]);
   }
-  // cout << "\nAfter: " << paths.size() << endl;
+  cout << "After: " << paths.size() << endl;
 
   return paths;
 }
@@ -381,6 +362,8 @@ void write_lines(string imgfile, string outfile)
       return;
   }
 
+  float xpercent = 0.15, ypercent = 0.1;
+
   cout << "infile: " << imgfile << endl;
 
   cv::Mat image2(image.rows/4, image.cols/4, image.type());
@@ -389,13 +372,13 @@ void write_lines(string imgfile, string outfile)
   cv::resize(imagecolor, image2color, image2.size(), 0, 0, cv::INTER_LINEAR);
 
   cv::Mat img2;
-  img2 = carve(image2, image2color);
+  img2 = carve(image2, image2color, xpercent);
 
   cv::Mat image3;
   cv::transpose(image2, image3);
   cv::Mat img3;
   cv::transpose(img2, img3);
-  img3 = carve(image3, img3);
+  img3 = carve(image3, img3, ypercent);
 
   cv::Mat outImg;
   cv::transpose(img3, outImg);
