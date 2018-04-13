@@ -14,7 +14,6 @@ cv::Mat carve(cv::Mat image, cv::Mat imagecolor, float percent);
 
 double** get_cost(int **img, vector<int> bounds, int rows, int cols);
 vector< vector<int> > get_paths(double **img, vector<int> bounds, int rows, int cols);
-vector< vector<int> > trim_paths(vector< vector<int> > paths, vector<int> bounds, int cols);
 
 double** get_cost_ver(int **img, vector<int> bounds, int rows, int cols);
 vector< vector<int> > get_paths_ver(double **img, vector<int> bounds, int rows, int cols);
@@ -25,7 +24,8 @@ std::vector<int> get_bounds(int **img, int rows, int cols, float percent);
 int* get_profile_ver(int **img, int rows, int cols);
 std::vector<int> get_bounds_ver(int **img, int rows, int cols, float percent);
 
-vector<Point> match_points(vector< vector<int> > paths, vector< vector<int> > paths2);
+vector< vector< cv::Point > > match_points(vector< vector<int> > paths, vector< vector<int> > paths2);
+cv::Mat drawPoints(cv::Mat image, vector< vector< cv::Point > > points);
 
 cv::Mat drawPaths(cv::Mat image, vector< vector<int> > paths, int width, std::vector<int> bounds);
 cv::Mat drawPaths_ver(cv::Mat image, vector< vector<int> > paths, int height, std::vector<int> bounds);
@@ -64,10 +64,18 @@ cv::Mat carve(cv::Mat image, cv::Mat imagecolor, float percent)
   cost = get_cost_ver(img, bounds, rows, cols);
   vector< vector<int> > paths2 = get_paths_ver(cost, bounds, rows, cols);
 
-  points = match_points(paths, paths2);
+  printf("Get Points\n");
+  vector< vector< cv::Point > > points = match_points(paths, paths2);
+  printf("Got Points\n");
 
-  cv::Mat mt = drawPaths(imagecolor, paths, cols, bounds);
-  mt = drawPaths_ver(mt, paths2, rows, bounds);
+  cv::Mat mt = drawPoints(imagecolor, points);
+  // cv::Mat mt = drawPaths(imagecolor, paths, cols, bounds);
+  // mt = drawPaths_ver(mt, paths2, rows, bounds);
+
+  for(y = 0; y < rows; y++) {
+    delete[] cost[y];
+  }
+  delete[] cost;
 
   for(y = 0; y < rows; y++) {
     delete[] img[y];
@@ -79,9 +87,9 @@ cv::Mat carve(cv::Mat image, cv::Mat imagecolor, float percent)
 }
 
 
-vector<Point> match_points(vector< vector<int> > paths, vector< vector<int> > paths2)
+vector< vector< cv::Point > > match_points(vector< vector<int> > paths, vector< vector<int> > paths2)
 {
-  vector<Point> points;
+  vector< vector< cv::Point > > points(paths.size());
   int i, j = 0, y, x;
   for(i = 0; i < paths.size(); i++)
   {
@@ -90,8 +98,11 @@ vector<Point> match_points(vector< vector<int> > paths, vector< vector<int> > pa
       y = paths[i][x];
       if (paths2[j][y] == x) {
         // found a point
-        points.push_back(Point(x, y));
+        points[i].push_back(cv::Point(x, y));
         ++j;
+      }if (j >= paths2.size()) {
+        j = 0;
+        break;
       }
     }
   }
@@ -112,50 +123,6 @@ double interpolation(int x, int f)
   }else if (f == 4) {
     return 1 / (1 + exp(x * -1.0));
   }
-}
-
-
-vector< vector<int> > trim_paths(vector< vector<int> > paths, vector<int> bounds, int cols)
-{
-  int path_count = bounds.size()-1;
-  int path, x, y, upper, lower;
-  float mean, stdev;
-  vector<int> freqp;
-  vector< vector<int> > newpaths;
-
-  for(path = 0; path < path_count; ++path)
-  {
-    lower = bounds[path]+1;
-    upper = bounds[path+1];
-    freqp.resize(upper-lower, 0);
-    for (x = 0; x < cols; ++x) {
-      assert(paths[path][x] >= lower && paths[path][x] <= upper);
-      freqp[paths[path][x]-lower] += 1;
-    }
-
-    // mean = 0.0;
-    // stdev = 0.0;
-    // for(y = lower; y < upper; ++y)
-    // {
-    //   cout << freqp[y-lower] << ", ";
-    //   // mean += freqp[y-lower];
-    //   if (mean < freqp[y-lower]) {
-    //     mean = freqp[y-lower];
-    //   }
-    // }
-    // // mean /= (upper-lower);
-    // for(y = lower; y < upper; ++y) {
-    //   stdev += pow(freqp[y-lower] - mean, 2);
-    // }
-    // stdev = sqrt(stdev / (upper-lower));
-    // // cout << "stdev: " << stdev << endl;
-    // if (stdev > 100) {
-    //   // paths.erase(paths.begin()+path);
-    //   // newpaths.push_back(paths[path]);
-    // }
-  }
-
-  return newpaths;
 }
 
 
@@ -372,9 +339,7 @@ vector<int> get_bounds_ver(int **img, int rows, int cols, float percent)
 {
   vector<int> bounds;
   int x;
-  printf("getting profile\n");
   int *prof = get_profile_ver(img, rows, cols);
-  printf("got profile\n");
   int five = cols * percent;
   for(x = 0; x < five; ++x) {
     prof[x] = 0;
@@ -537,6 +502,20 @@ vector< vector<int> > get_paths_ver(double **img, vector<int> bounds, int rows, 
 }
 
 
+cv::Mat drawPoints(cv::Mat image, vector< vector< cv::Point > > points)
+{
+  int j, k;
+  for(j = 0; j < points.size(); ++j)
+  {
+    for(k = 0; k < points[j].size(); ++k)
+    {
+      cv::circle(image, points[j][k], 5, cv::Scalar( 0, 0, 255 ));
+    }
+  }
+  return image;
+}
+
+
 cv::Mat drawPaths(cv::Mat image, vector< vector<int> > paths, int width, std::vector<int> bounds)
 {
   int path, x;
@@ -547,6 +526,7 @@ cv::Mat drawPaths(cv::Mat image, vector< vector<int> > paths, int width, std::ve
       image.at<cv::Vec3b>(paths[path][x], x) = cv::Vec3b(0, 0, 255);
     }
   }
+
   // for(path = 0; path < bounds.size(); path++)
   // {
   //   for(x = 0; x < width; x++)
