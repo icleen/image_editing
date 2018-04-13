@@ -25,6 +25,8 @@ std::vector<int> get_bounds(int **img, int rows, int cols, float percent);
 int* get_profile_ver(int **img, int rows, int cols);
 std::vector<int> get_bounds_ver(int **img, int rows, int cols, float percent);
 
+vector<Point> match_points(vector< vector<int> > paths, vector< vector<int> > paths2);
+
 cv::Mat drawPaths(cv::Mat image, vector< vector<int> > paths, int width, std::vector<int> bounds);
 cv::Mat drawPaths_ver(cv::Mat image, vector< vector<int> > paths, int height, std::vector<int> bounds);
 void draw(cv::Mat image);
@@ -77,16 +79,23 @@ cv::Mat carve(cv::Mat image, cv::Mat imagecolor, float percent)
 }
 
 
-vector< vector<int> > match_points(vector< vector<int> > paths, vector< vector<int> > paths2)
+vector<Point> match_points(vector< vector<int> > paths, vector< vector<int> > paths2)
 {
-  int y, x;
-  for(y = 0; y < paths.size(); y++)
+  vector<Point> points;
+  int i, j = 0, y, x;
+  for(i = 0; i < paths.size(); i++)
   {
-    for(x = 0; x < paths2.size(); x++)
+    for(x = 0; x < paths[i].size(); x++)
     {
-      paths2[x];
+      y = paths[i][x];
+      if (paths2[j][y] == x) {
+        // found a point
+        points.push_back(Point(x, y));
+        ++j;
+      }
     }
   }
+  return points;
 }
 
 
