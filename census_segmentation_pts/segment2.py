@@ -135,6 +135,32 @@ if __name__ == '__main__':
 
     output_grid = np.full((vert_cluster_cnt, horz_cluster_cnt, 2), np.nan)
 
+    MATCH_THRESHOLD=20.0
+    for i, c in enumerate(vert_clusters):
+
+        these_predictions = predictions[c]
+        these_confidences = confidence[c]
+
+        vert_mean = vert_cluster_means[i]
+
+        pts = np.concatenate((horz_cluster_means[:,None], np.full_like(horz_cluster_means[:,None], vert_mean)), axis=1)
+
+        dis = (these_predictions[:,None,:]-pts[None,:,:])**2
+        dis = np.sqrt(dis.sum(axis=-1))
+        min_dis_idx = dis.argmin(axis=1)
+        min_dis = dis.min(axis=1)
+
+        #probably a non-for-loop way to do this
+        d = defaultdict(lambda: (MATCH_THRESHOLD, None))
+        for pt_idx, j, conf in zip(np.arange(len(min_dis_idx)), min_dis_idx, min_dis):
+
+            prev_score, _ = d[j]
+            if prev_score > conf:
+                d[j] = conf, c[pt_idx]
+
+        for j, a in d.iteritems():
+            output_grid[i,j] = predictions[a[1]]
+
     nan_idxs = np.where(np.isnan(output_grid[:,:,0]))
 
     for i,j in zip(*nan_idxs):

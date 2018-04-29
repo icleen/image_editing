@@ -135,6 +135,7 @@ output_grid = np.full((vert_cluster_cnt, horz_cluster_cnt, 2), np.nan)
 
 c_img = org_img.copy()
 MATCH_THRESHOLD=20.0
+color = (255,0,0)
 for i, c in enumerate(vert_clusters):
 
     these_predictions = predictions[c]
@@ -167,8 +168,6 @@ for i, c in enumerate(vert_clusters):
     for j,pt in enumerate(these_predictions):
         x = int(pt[0])
         y = int(pt[1])
-
-        color = (255,0,0)
         cv2.circle(c_img, (x, y), 5, color, 1)
     #
     # for j,pt in enumerate(final_predictions):
@@ -226,6 +225,7 @@ if not os.path.exists("result"):
     os.makedirs("result")
     os.makedirs("result/cells")
 
+color = (0,0,255)
 for i in range(output_grid.shape[0]):
     for j in range(output_grid.shape[1]):
 
@@ -234,7 +234,6 @@ for i in range(output_grid.shape[0]):
         x = int(pt[0])
         y = int(pt[1])
 
-        color = (0,0,255)
         cv2.circle(c_img, (x, y), 5, color, 1)
 
 cv2.imwrite("result/visual.png", c_img)
