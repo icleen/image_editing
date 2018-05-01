@@ -39,7 +39,8 @@ def proj_nms_single(confidence, x_points, overlap_thresh):
         clusters.append(matched_idxs)
         idxs = np.delete(idxs, matches)
 
-    # returns a list of lists of points, so that each cluster in clusters conatains a bunch of points that are close to each other
+    # returns a list of lists of points, so that each cluster in clusters
+    # conatains a bunch of points that are close to each other
     return clusters
 
 
@@ -55,8 +56,8 @@ def get_img(image_path):
     return full_res_img, org_img, s
 
 
-def get_corners(org_img, sol, s):
-    img = org_img.transpose([2,1,0])[None,...]
+def get_corners(sml_img, sol, s, c_img=None):
+    img = sml_img.transpose([2,1,0])[None,...]
     img = img.astype(np.float32)
     img = torch.from_numpy(img)
     img = img / 128.0 - 1.0
@@ -90,6 +91,8 @@ def get_corners(org_img, sol, s):
 
     vert_clusters = proj_nms_single(confidence, vert_projection, 10.0)
     horz_clusters = proj_nms_single(confidence, horz_projection, 10.0)
+    # make sure there are at least vert_cluster_cnt (41) in vert_clusters
+    assert len(vert_clusters) >= vert_cluster_cnt and len(horz_clusters) >= horz_cluster_cnt
 
     # sort the clusters by how many points are in each cluster, with larger clusters are first
     vert_clusters.sort(key=lambda x:len(x), reverse=True)
@@ -114,9 +117,9 @@ def get_corners(org_img, sol, s):
     vert_clusters = vert_clusters[vert_mean_sort_idx]
     horz_clusters = horz_clusters[horz_mean_sort_idx]
 
-
     output_grid = np.full((vert_cluster_cnt, horz_cluster_cnt, 2), np.nan)
 
+    color = (255,0,0) # red
     MATCH_THRESHOLD = 20.0
     for i, c in enumerate(vert_clusters):
 
@@ -126,7 +129,8 @@ def get_corners(org_img, sol, s):
         vert_median = vert_cluster_medians[i]
 
         # gets a set of default values for the pts along the x axis
-        pts = np.concatenate((horz_cluster_medians[:,None], np.full_like(horz_cluster_medians[:,None], vert_median)), axis=1)
+        pts = np.concatenate((horz_cluster_medians[:,None],
+            np.full_like(horz_cluster_medians[:,None], vert_median)), axis=1)
 
         # distances from approximate cluster centers to the actual predictions in that cluster
         dis = (these_predictions[:,None,:]-pts[None,:,:])**2
@@ -148,6 +152,13 @@ def get_corners(org_img, sol, s):
         # this just fills in the grid with the points selected previously
         for j, a in d.iteritems():
             output_grid[i,j] = predictions[a[1]]
+
+        if c_img is not None:
+            for j,pt in enumerate(these_predictions):
+                x = int(pt[0])
+                y = int(pt[1])
+
+                cv2.circle(c_img, (x, y), 5, color, 1)
 
     # if there was not a point within the MATCH_THRESHOLD in the previous step,
     # then the point in the grid will still be nan, meaning that we couldn't
@@ -182,8 +193,7 @@ def get_corners(org_img, sol, s):
         j_pos = None if j_pos == output_grid.shape[0] else j_pos
 
 
-        assert i_pos is not None or i_neg is not None
-        assert j_pos is not None or j_neg is not None
+        assert i_pos is not None and i_neg is not None
         if i_pos is None:
             i_pos = i_neg
 
@@ -194,27 +204,23 @@ def get_corners(org_img, sol, s):
             j_pos = j_neg
 
         if j_neg is None:
-            j_neg = j_pos
+            j_net = j_pos
 
         # This doees the averaging part described above
         output_grid[i,j,0] = (output_grid[i_pos, j,0] + output_grid[i_neg, j,0])/2.0
         output_grid[i,j,1] = (output_grid[i, j_pos,1] + output_grid[i, j_neg,1])/2.0
 
-    return output_grid
+    return output_grid, c_img
 
 
 def write_segments(corners, img, img_path):
     if not os.path.exists("segments"):
         os.makedirs("segments")
 
-    if not os.path.exists("visuals"):
-        os.makedirs("visuals")
-
     part_path = img_path.split('/')[-1].split('.')[0]
     page = {}
 
-    c_img = img.copy()
-    color = (0,0,255)
+
     for i in range(corners.shape[0]-1):
         person = {}
         for j in range(corners.shape[1]-1):
@@ -233,21 +239,7 @@ def write_segments(corners, img, img_path):
 
             cv2.imwrite("segments/{}_{}_{}.png".format(part_path,i,j), crop)
             person[j] = "segments/{}_{}_{}.png".format(part_path,i,j)
-
-            cv2.circle(c_img, (min_x, min_y), 15, color, 2)
-            if i == corners.shape[0]-2 and j == corners.shape[1]-2:
-                cv2.circle(c_img, (max_x, max_y), 15, color, 2)
-                cv2.circle(c_img, (min_x, max_y), 15, color, 2)
-                cv2.circle(c_img, (max_x, min_y), 15, color, 2)
-            elif i == corners.shape[0]-2:
-                cv2.circle(c_img, (min_x, max_y), 15, color, 2)
-            elif j == corners.shape[1]-2:
-                cv2.circle(c_img, (max_x, min_y), 15, color, 2)
-
-
         page[i] = person
-
-    cv2.imwrite("visuals/{}.png".format(part_path), c_img)
 
     return page
 
@@ -255,7 +247,7 @@ def write_segments(corners, img, img_path):
 if __name__ == '__main__':
 
     if len(sys.argv) < 3:
-        print "Usage: ", sys.argv[0], " yaml_config_file image_folder_path"
+        print "Usage: ", sys.argv[0], " yaml_config_file image_path"
         sys.exit()
 
     with open(sys.argv[1]) as f:
@@ -266,21 +258,37 @@ if __name__ == '__main__':
 
     sol = continuous_state.init_model(config)
 
-    image_folder = sys.argv[2]
-    pages = {}
-    i = 0
-    for f in os.listdir(image_folder):
-        if ".jpg" in f:
-            sys.stdout.write('.')
-            sys.stdout.flush()
-            try:
-                big_img, sml_img, s = get_img(os.path.join(image_folder, f))
-                corners = get_corners(sml_img, sol, s)
-                pages[f] = write_segments(corners, big_img, f)
-                i += 1
+    image_file = sys.argv[2]
+    big_img, sml_img, s = get_img(image_file)
+    corners, c_img = get_corners(sml_img, sol, s, c_img=big_img.copy())
 
-                with open('pages.json', 'w') as f:
-                    json.dump(pages, f)
-            except Exception as e:
-                print '\nerror on ', f
-    print 'Done'
+    color = (0,0,255) # blue
+    for i in range(output_grid.shape[0]):
+        for j in range(output_grid.shape[1]):
+
+            pt = output_grid[i,j]
+
+            x = int(pt[0])
+            y = int(pt[1])
+            cv2.circle(c_img, (x, y), 5, color, 1)
+
+    part_path = img_path.split('/')[-1].split('.')[0]
+    cv2.imwrite("{}_visual.png".format(part_path), c_img)
+
+    page = {image_file: write_segments(corners, big_img, f)}
+    i += 1
+
+    with open('page.json', 'w') as f:
+        json.dump(page, f)
+
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
